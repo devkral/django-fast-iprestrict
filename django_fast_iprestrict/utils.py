@@ -67,7 +67,13 @@ def get_ip(request: HttpRequest):
     return client_ip
 
 
-def get_default_action():
+def get_default_action(action=None):
+    if action:
+        return action
     action = RULE_ACTION[getattr(settings, "IPRESTRICT_DEFAULT_ACTION", "allow")]
     assert action != RULE_ACTION.disabled, "disabled is not a valid default action"
     return action.value
+
+
+class LockoutException(Exception):
+    pass

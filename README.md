@@ -11,3 +11,4 @@ IPRESTRICT_DEFAULT_ACTION: allow/deny : default action when no rule matches, def
 -   tests
 -   docs
 -   cleanup
+-   lockout prevention

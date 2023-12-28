@@ -1,9 +1,14 @@
 from django.apps import AppConfig
-from django.db.models.signals import post_delete
+from django.db.models.signals import post_delete, post_save
 
 
-def signal_position_cleanup(**kwargs):
+def signal_position_cleanup(instance, raw=False, **kwargs):
     from .models import Rule
+
+    if raw:
+        return
+    if not instance._trigger_cleanup:
+        return
 
     Rule.objects.position_cleanup()
 
@@ -19,4 +24,10 @@ class DjangoFastIprestrictConfig(AppConfig):
             signal_position_cleanup,
             sender=Rule,
             dispatch_uid="django-fast-iprestrict-after-deletion",
+        )
+
+        post_save.connect(
+            signal_position_cleanup,
+            sender=Rule,
+            dispatch_uid="django-fast-iprestrict-after-save",
         )

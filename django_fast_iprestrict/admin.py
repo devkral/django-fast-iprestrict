@@ -1,6 +1,13 @@
+from posixpath import dirname
+
 from django.contrib import admin
 from django.core.exceptions import PermissionDenied
-from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseRedirect
+from django.http import (
+    HttpRequest,
+    HttpResponse,
+    HttpResponseBadRequest,
+    HttpResponseRedirect,
+)
 from django.urls import path
 from django.utils.html import format_html
 
@@ -92,22 +99,31 @@ class RuleAdmin(admin.ModelAdmin):
             *super().get_urls(),
         ]
 
-    def rule_move(self, request, object_id):
+    def rule_move(self, request: HttpRequest, object_id):
         direction = request.POST["rule_move_direction"]
+        parent_path = dirname(request.path.rstrip("/"))
         if direction == "up":
-            self.model.objects.position_up(object_id)
+            self.model.objects.position_up(
+                object_id, ip=get_ip(request), path=parent_path
+            )
         elif direction == "down":
-            self.model.objects.position_down(object_id)
+            self.model.objects.position_down(
+                object_id, ip=get_ip(request), path=parent_path
+            )
         elif direction == "start":
-            self.model.objects.position_start(object_id)
+            self.model.objects.position_start(
+                object_id, ip=get_ip(request), path=parent_path
+            )
         elif direction == "end":
-            self.model.objects.position_end(object_id)
+            self.model.objects.position_end(
+                object_id, ip=get_ip(request), path=parent_path
+            )
         else:
             return HttpResponseBadRequest()
         return HttpResponseRedirect("../../")
 
     def simulate_rules(self, request, test_path):
-        rule_id = RulePath.objects.match_path_and_ip(test_path, get_ip(request))
+        rule_id = RulePath.objects.match_ip_and_path(get_ip(request), test_path)
         if rule_id:
             rule = Rule.objects.get(id=rule_id)
             if rule.action == RULE_ACTION.deny.value:
@@ -126,7 +142,7 @@ class RuleAdmin(admin.ModelAdmin):
 
         test_path = request.POST.get("test_path", None) or ""
         if test_path:
-            rule_id = RulePath.objects.match_path_and_ip(test_path, test_ip)
+            rule_id = RulePath.objects.match_ip_and_path(test_ip, test_path)
             self.message_user(
                 request,
                 f"Parameters: ip: {test_ip}, path: {test_path}",
@@ -143,7 +159,7 @@ class RuleAdmin(admin.ModelAdmin):
             rule = Rule.objects.get(id=rule_id)
             self.message_user(
                 request,
-                f"Matched rule: {rule.name}, action: {RULE_ACTION[rule.action]}",
+                f"Matched rule: {rule.name}, action: {RULE_ACTION(rule.action).label}",
                 level=SUCCESS if rule.action == RULE_ACTION.allow.value else WARNING,
             )
         else:
@@ -151,9 +167,24 @@ class RuleAdmin(admin.ModelAdmin):
 
         return HttpResponseRedirect("../")
 
+    def save_model(self, request, obj, form, change):
+        obj._trigger_cleanup = False
+        super().save_model(request, obj, form, change)
+
+    def delete_model(self, request, obj):
+        obj._trigger_cleanup = False
+        super().delete_model(request, obj)
+        Rule.objects.position_cleanup(ip=get_ip(request), path=request.path)
+
     def delete_queryset(self, request, queryset):
         super().delete_queryset(request, queryset)
-        Rule.objects.position_cleanup()
+        parent_path = dirname(request.path.rstrip("/"))
+
+        Rule.objects.position_cleanup(ip=get_ip(request), path=parent_path)
+
+    def save_related(self, request, form, formsets, change):
+        super().save_related(request, form, formsets, change)
+        Rule.objects.position_cleanup(ip=get_ip(request), path=request.path)
 
 
 @admin.register(RulePath)

@@ -9,7 +9,7 @@ from django.db.models import Max, Window
 from django.db.models.functions import RowNumber
 from django.db.transaction import atomic
 
-from .utils import RULE_ACTION
+from .utils import RULE_ACTION, LockoutException, get_default_action
 from .validators import validate_regex, validate_rule
 
 # Create your models here.
@@ -20,11 +20,46 @@ def get_default_position():
 
 
 class RuleManager(models.Manager):
-    def _atomic_update(self):
+    def _atomic_update(self, ip=None, path=None, use_atomic=True):
         stack = ExitStack()
         stack.queryset = self.all().select_for_update()
         stack.enter_context(atomic())
+        if ip:
+            stack.callback(
+                self.lockout_check, ip=ip, path=path, clear_caches_on_error=True
+            )
+
+        stack.callback(self._position_cleanup, stack.queryset)
         return stack
+
+    def clear_caches(self):
+        RulePath.objects.path_ip_matchers.cache_clear()
+        self.ip_matchers.cache_clear()
+
+    def lockout_check(self, ip, path=None, clear_caches_on_error=True):
+        if not ip:
+            return
+        if path:
+            if (
+                get_default_action(
+                    RulePath.objects.match_ip_and_path(ip, path, return_action=True)
+                )
+                == RULE_ACTION.deny.value
+            ):
+                # otherwise the caches could cause access errors until server restart
+                if clear_caches_on_error:
+                    self.clear_caches()
+                raise LockoutException("would lock current user out")
+
+        else:
+            if (
+                get_default_action(self.match_ip(ip, return_action=True))
+                == RULE_ACTION.deny.value
+            ):
+                # otherwise the caches could cause access errors until server restart
+                if clear_caches_on_error:
+                    self.clear_caches()
+                raise LockoutException("would lock current user out")
 
     def _position_cleanup(self, queryset):
         u_dict = {}
@@ -35,12 +70,11 @@ class RuleManager(models.Manager):
                 u_dict[val.id] = val.position_new
         for rule_id, position in u_dict.items():
             queryset.filter(id=rule_id).update(position=position)
-        RulePath.objects.path_ip_matchers.cache_clear()
-        self.ip_matchers.cache_clear()
+        self.clear_caches()
 
-    def position_cleanup(self):
-        with self._atomic_update() as stack:
-            self._position_cleanup(stack.queryset)
+    def position_cleanup(self, ip=None, path=None):
+        with self._atomic_update(ip=ip, path=path):
+            pass
 
     @lru_cache(maxsize=1)
     def ip_matchers(self):
@@ -59,13 +93,12 @@ class RuleManager(models.Manager):
                 pass
         return None
 
-    def position_start(self, rule_id):
-        with self._atomic_update() as stack:
+    def position_start(self, rule_id, ip=None, path=None):
+        with self._atomic_update(ip=ip, path=path) as stack:
             stack.queryset.filter(id=rule_id).update(position=0)
-            self._position_cleanup(stack.queryset)
 
-    def position_end(self, rule_id):
-        with self._atomic_update() as stack:
+    def position_end(self, rule_id, ip=None, path=None):
+        with self._atomic_update(ip=ip, path=path) as stack:
             max_position = stack.queryset.aggregate(
                 max_position=Max("position", default=0)
             )["max_position"]
@@ -73,10 +106,9 @@ class RuleManager(models.Manager):
             self.get_queryset().annotate().filter(id=rule_id).update(
                 position=max_position + 1
             )
-            self._position_cleanup(stack.queryset)
 
-    def position_up(self, rule_id):
-        with self._atomic_update() as stack:
+    def position_up(self, rule_id, ip=None, path=None):
+        with self._atomic_update(ip=ip, path=path) as stack:
             rule_position = stack.queryset.filter(id=rule_id).values("position")
             stack.queryset.annotate(
                 position_mod=models.Case(
@@ -89,10 +121,9 @@ class RuleManager(models.Manager):
                     default=models.Value(0),
                 ),
             ).update(position=models.F("position") + models.F("position_mod"))
-            self._position_cleanup(stack.queryset)
 
-    def position_down(self, rule_id):
-        with self._atomic_update() as stack:
+    def position_down(self, rule_id, ip=None, path=None):
+        with self._atomic_update(ip=ip, path=path) as stack:
             rule_position = stack.queryset.filter(id=rule_id).values("position")
             stack.queryset.annotate(
                 position_mod=models.Case(
@@ -104,10 +135,10 @@ class RuleManager(models.Manager):
                     default=models.Value(0),
                 ),
             ).update(position=models.F("position") + models.F("position_mod"))
-            self._position_cleanup(stack.queryset)
 
 
 class Rule(models.Model):
+    _trigger_cleanup = True
     position = models.PositiveIntegerField(blank=True, default=get_default_position)
     name = models.CharField(max_length=50, unique=True)
     rule = models.CharField(max_length=50, validators=[validate_rule])
@@ -170,7 +201,7 @@ class RulePathManager(models.Manager):
             patterns.append((re.compile(last_pattern[0]), *last_pattern[1:]))
         return patterns
 
-    def match_path_and_ip(self, path, ip, return_action=False):
+    def match_ip_and_path(self, ip, path, return_action=False):
         ip_network_user = ipaddress.ip_network(ip, strict=False)
         for path_pattern, ip_network, rule_id, action in self.path_ip_matchers():
             try:
