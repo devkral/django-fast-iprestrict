@@ -1,4 +1,3 @@
-from django.conf import settings
 from django.contrib import admin
 from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse, HttpResponseRedirect
@@ -6,7 +5,7 @@ from django.urls import path
 from django.utils.html import format_html
 
 from .models import Rule, RulePath
-from .utils import get_ip
+from .utils import RULE_ACTION, get_default_action, get_ip
 
 # Register your models here.
 
@@ -85,10 +84,10 @@ class RuleAdmin(admin.ModelAdmin):
         rule_id = RulePath.objects.match_path_and_ip(test_path, get_ip(request))
         if rule_id:
             rule = Rule.objects.get(id=rule_id)
-            if rule.action == "b":
+            if rule.action == RULE_ACTION.deny.value:
                 raise PermissionDenied()
 
-        elif getattr(settings, "IPRESTRICT_DEFAULT_ACTION", "a") == "b":
+        elif get_default_action() == RULE_ACTION.deny.value:
             raise PermissionDenied()
         return HttpResponse(f"accessed: {test_path}")
 
@@ -118,8 +117,8 @@ class RuleAdmin(admin.ModelAdmin):
             rule = Rule.objects.get(id=rule_id)
             self.message_user(
                 request,
-                f"Matched rule: {rule.name}, action: {Rule.ACTION[rule.action]}",
-                level=SUCCESS if rule.action == "a" else WARNING,
+                f"Matched rule: {rule.name}, action: {RULE_ACTION[rule.action]}",
+                level=SUCCESS if rule.action == RULE_ACTION.allow.value else WARNING,
             )
         else:
             self.message_user(request, "No rule matched", level=ERROR)

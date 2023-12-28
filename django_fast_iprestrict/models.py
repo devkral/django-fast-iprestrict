@@ -9,6 +9,7 @@ from django.db.models import Max, Window
 from django.db.models.functions import RowNumber
 from django.db.transaction import atomic
 
+from .utils import RULE_ACTION
 from .validators import validate_regex, validate_rule
 
 # Create your models here.
@@ -44,7 +45,7 @@ class RuleManager(models.Manager):
     @lru_cache(maxsize=1)
     def ip_matchers(self):
         patterns = []
-        for obj in self.exclude(action="c"):
+        for obj in self.exclude(action=RULE_ACTION.disabled.value):
             patterns.append((obj.get_processed_rule(), obj.id, obj.action))
         return patterns
 
@@ -110,8 +111,9 @@ class Rule(models.Model):
     position = models.PositiveIntegerField(blank=True, default=get_default_position)
     name = models.CharField(max_length=50, unique=True)
     rule = models.CharField(max_length=50, validators=[validate_rule])
-    ACTION = {"a": "allow", "b": "deny", "c": "disabled"}
-    action = models.CharField(max_length=1, choices=ACTION, default="a")
+    action = models.CharField(
+        max_length=1, choices=RULE_ACTION.choices, default=RULE_ACTION.allow
+    )
     objects = RuleManager()
 
     class Meta:
@@ -130,7 +132,7 @@ class Rule(models.Model):
         )
 
     def match_ip(self, ip, return_action=False):
-        if self.action == "c":
+        if self.action == RULE_ACTION.disabled.value:
             return None
         ip_network_user = ipaddress.ip_network(ip, strict=False)
         ip_network = self.get_processed_rule()
@@ -147,7 +149,9 @@ class RulePathManager(models.Manager):
     def path_ip_matchers(self):
         patterns = []
         last_pattern = None
-        for obj in self.exclude(rule__action="c").select_related("rule"):
+        for obj in self.exclude(rule__action=RULE_ACTION.disabled.value).select_related(
+            "rule"
+        ):
             if not last_pattern or last_pattern[1] != obj.id:
                 if last_pattern:
                     patterns.append((re.compile(last_pattern[0]), *last_pattern[1:]))

@@ -1,7 +1,6 @@
-from django.conf import settings
 from django.http import HttpRequest
 
-from .utils import get_ip
+from .utils import RULE_ACTION, get_default_action, get_ip
 
 
 def apply_iprestrict(request: HttpRequest, group):
@@ -9,8 +8,8 @@ def apply_iprestrict(request: HttpRequest, group):
 
     rule = Rule.objects.filter(name=group).first()
     if not rule:
-        return int(getattr(settings, "IPRESTRICT_DEFAULT_ACTION", "a") == "b")
-    if rule.match_ip(get_ip(request), return_action=True) == "b":
+        return int(get_default_action() == RULE_ACTION.deny.value)
+    if rule.match_ip(get_ip(request), return_action=True) == RULE_ACTION.deny.value:
         return 1
 
     return 0

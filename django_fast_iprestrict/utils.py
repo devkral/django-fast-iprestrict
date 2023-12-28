@@ -2,12 +2,19 @@ import functools
 import re
 
 from django.conf import settings
+from django.db import models
 from django.http import HttpRequest
 
 
 class invertedset(frozenset):
     def __contains__(self, item):
         return not super().__contains__(item)
+
+
+class RULE_ACTION(models.TextChoices):
+    allow = ("a", "allow")
+    deny = ("b", "deny")
+    disabled = ("c", "disabled")
 
 
 @functools.lru_cache(maxsize=1)
@@ -58,3 +65,9 @@ def get_ip(request: HttpRequest):
         client_ip = _ip6_port_cleanup_regex.sub("", client_ip).strip("[]")
 
     return client_ip
+
+
+def get_default_action():
+    action = RULE_ACTION[getattr(settings, "IPRESTRICT_DEFAULT_ACTION", "allow")]
+    assert action != RULE_ACTION.disabled, "disabled is not a valid default action"
+    return action.value

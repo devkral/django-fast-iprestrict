@@ -1,9 +1,8 @@
 from asgiref.sync import iscoroutinefunction, sync_to_async
-from django.conf import settings
 from django.core.exceptions import PermissionDenied
 from django.utils.decorators import sync_and_async_middleware
 
-from .utils import get_ip
+from .utils import RULE_ACTION, get_default_action, get_ip
 
 
 @sync_and_async_middleware
@@ -19,8 +18,8 @@ def fast_iprestrict(get_response):
                 request.path, get_ip(request), return_action=True
             )
             if not action:
-                action = getattr(settings, "IPRESTRICT_DEFAULT_ACTION", "a")
-            if action == "b":
+                action = get_default_action()
+            if action == RULE_ACTION.deny.value:
                 raise PermissionDenied()
             response = await get_response(request)
             return response
@@ -32,8 +31,8 @@ def fast_iprestrict(get_response):
                 request.path, get_ip(request), return_action=True
             )
             if not action:
-                action = getattr(settings, "IPRESTRICT_DEFAULT_ACTION", "a")
-            if action == "b":
+                action = get_default_action()
+            if action == RULE_ACTION.deny.value:
                 raise PermissionDenied()
             response = get_response(request)
             return response
