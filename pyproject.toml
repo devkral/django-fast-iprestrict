@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "django-fast-iprestrict"
+version = "0.1.0"
+description = ""
+authors = ["alex <devkral@web.de>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.10,<4.0"
+django-fast-ratelimit = "*"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
