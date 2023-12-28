@@ -8,11 +8,12 @@ from django.http import (
     HttpResponseBadRequest,
     HttpResponseRedirect,
 )
+from django.template.response import TemplateResponse
 from django.urls import path
 from django.utils.html import format_html
 
 from .models import Rule, RulePath
-from .utils import RULE_ACTION, get_default_action, get_ip
+from .utils import RULE_ACTION, LockoutException, get_default_action, get_ip
 
 # Register your models here.
 
@@ -166,6 +167,38 @@ class RuleAdmin(admin.ModelAdmin):
             self.message_user(request, "No rule matched", level=ERROR)
 
         return HttpResponseRedirect("../")
+
+    def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
+        try:
+            return super().changeform_view(
+                request,
+                object_id=object_id,
+                form_url=form_url,
+                extra_context=extra_context,
+            )
+        except LockoutException:
+            context = {**self.admin_site.each_context(request)}
+            return TemplateResponse(
+                request,
+                "admin/django_fast_iprestrict/lockout_prevented.html",
+                context=context,
+                status=400,
+            )
+
+    def changelist_view(self, request, extra_context=None):
+        try:
+            return super().changelist_view(
+                request,
+                extra_context=extra_context,
+            )
+        except LockoutException:
+            context = {**self.admin_site.each_context(request)}
+            return TemplateResponse(
+                request,
+                "admin/django_fast_iprestrict/lockout_prevented.html",
+                context=context,
+                status=400,
+            )
 
     def save_model(self, request, obj, form, change):
         obj._trigger_cleanup = False
