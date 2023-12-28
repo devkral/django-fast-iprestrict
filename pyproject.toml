@@ -8,8 +8,13 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = ">=3.10,<4.0"
-django-fast-ratelimit = "*"
+django = ">=4.0"
+django-fast-ratelimit = {version = ">=3.0.0", optional=true }
 
+[tool.poetry.extras]
+ratelimit = [
+    "django-fast-ratelimit",
+]
 
 [build-system]
 requires = ["poetry-core"]

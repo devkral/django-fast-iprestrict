@@ -41,7 +41,7 @@ bcrypt = ["bcrypt"]
 name = "django-fast-ratelimit"
 version = "4.1.0"
 description = "Fast ratelimit implementation with django caches"
-optional = false
+optional = true
 python-versions = ">=3.9,<4.0"
 files = [
     {file = "django_fast_ratelimit-4.1.0-py3-none-any.whl", hash = "sha256:2355edd7962cf3a6ff231f75fad7b08651a92080104e2cb5d5c734ff64b16c58"},
@@ -89,7 +89,10 @@ files = [
     {file = "tzdata-2023.3.tar.gz", hash = "sha256:11ef1e08e54acb0d4f95bdb1be05da659673de4acbd21bf9c69e94cc5e907a3a"},
 ]
 
+[extras]
+ratelimit = ["django-fast-ratelimit"]
+
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<4.0"
-content-hash = "0547aab5d35aeed3799aaafab71bbec3f0eed4d8d45d45daa3198b9fdf91aceb"
+content-hash = "d827af44ebed9f732577c3f57d1fb0eb637e97e3f66617643db68f02a99d6aa8"

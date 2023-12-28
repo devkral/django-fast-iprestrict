@@ -1,10 +1,10 @@
-import ratelimit
 from django.contrib import admin
 from django.http import HttpResponseRedirect
 from django.urls import path
 from django.utils.html import format_html
 
 from .models import Rule, RulePath
+from .utils import get_ip
 
 # Register your models here.
 
@@ -81,7 +81,7 @@ class RuleAdmin(admin.ModelAdmin):
 
         test_ip = request.POST.get("test_ip", None)
         if not test_ip:
-            test_ip = ratelimit.get_ip(request)
+            test_ip = get_ip(request)
 
         if test_path is None:
             back_count = 1

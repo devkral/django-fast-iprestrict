@@ -3,12 +3,13 @@ import re
 from contextlib import ExitStack
 from functools import lru_cache
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Max, Window
 from django.db.models.functions import RowNumber
 from django.db.transaction import atomic
 
-from .validators import validate_rule
+from .validators import validate_regex, validate_rule
 
 # Create your models here.
 
@@ -186,3 +187,14 @@ class RulePath(models.Model):
 
     def get_processed_path(self):
         return self.path if self.is_regex else re.escape(self.path)
+
+    def clean_fields(self, exclude=None):
+        super().clean_fields(exclude=exclude)
+        if self.is_regex:
+            try:
+                validate_regex(self.path)
+            except ValidationError as exc:
+                if exclude and "path" in exclude:
+                    raise exc
+                else:
+                    raise ValidationError({"path": exc})
