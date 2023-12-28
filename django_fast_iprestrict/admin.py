@@ -1,5 +1,7 @@
+from django.conf import settings
 from django.contrib import admin
-from django.http import HttpResponseRedirect
+from django.core.exceptions import PermissionDenied
+from django.http import HttpResponse, HttpResponseRedirect
 from django.urls import path
 from django.utils.html import format_html
 
@@ -52,7 +54,10 @@ class RuleAdmin(admin.ModelAdmin):
     def get_urls(self):
         return [
             path("test_rules/", self.test_rules),
-            path("test_rules/<path:test_path>", self.test_rules),
+            path(
+                "simulate_rules<path:test_path>",
+                self.simulate_rules,
+            ),
             path("<str:object_id>/rule_up/", self.rule_up),
             path("<str:object_id>/rule_down/", self.rule_down),
             path("<str:object_id>/rule_start/", self.rule_start),
@@ -76,18 +81,25 @@ class RuleAdmin(admin.ModelAdmin):
         self.model.objects.position_end(object_id)
         return HttpResponseRedirect("../../")
 
-    def test_rules(self, request, test_path=None):
+    def simulate_rules(self, request, test_path):
+        rule_id = RulePath.objects.match_path_and_ip(test_path, get_ip(request))
+        if rule_id:
+            rule = Rule.objects.get(id=rule_id)
+            if rule.action == "b":
+                raise PermissionDenied()
+
+        elif getattr(settings, "IPRESTRICT_DEFAULT_ACTION", "a") == "b":
+            raise PermissionDenied()
+        return HttpResponse(f"accessed: {test_path}")
+
+    def test_rules(self, request):
         from django.contrib.messages import ERROR, INFO, SUCCESS, WARNING
 
         test_ip = request.POST.get("test_ip", None)
         if not test_ip:
             test_ip = get_ip(request)
 
-        if test_path is None:
-            back_count = 1
-            test_path = request.POST.get("test_path", None) or ""
-        else:
-            back_count = test_path.count("/") + 1
+        test_path = request.POST.get("test_path", None) or ""
         if test_path:
             rule_id = RulePath.objects.match_path_and_ip(test_path, test_ip)
             self.message_user(
@@ -112,7 +124,7 @@ class RuleAdmin(admin.ModelAdmin):
         else:
             self.message_user(request, "No rule matched", level=ERROR)
 
-        return HttpResponseRedirect("../" * back_count)
+        return HttpResponseRedirect("../")
 
     def delete_queryset(self, request, queryset):
         super().delete_queryset(request, queryset)

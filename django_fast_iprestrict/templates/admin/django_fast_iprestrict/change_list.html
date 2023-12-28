@@ -1,9 +1,8 @@
 {% extends "admin/change_list.html" %}
 
-
 {% block object-tools %}
     <div>
-        <form action="test_rules/" method="POST">
+        <form action="../rule/test_rules/" method="POST">
             {% csrf_token %}
             <div>
                 <label>
@@ -19,8 +18,12 @@
                     (leave empty to test ip addresses only)
                 </label>
             </div>
-            <button type="submit">Test test rules</button>
+            <button type="submit">Test rules</button>
         </form>
+    </div>
+    <br />
+    <div>
+        <a href="../rule/simulate_rules/">simulate rules</a>
     </div>
     <br />
     {{ block.super }}
