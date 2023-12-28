@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.core.exceptions import PermissionDenied
-from django.http import HttpResponse, HttpResponseRedirect
+from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseRedirect
 from django.urls import path
 from django.utils.html import format_html
 
@@ -15,15 +15,43 @@ class RulePathInlineAdmin(admin.TabularInline):
     extra = 1
 
 
+# reuse the existing form to prevent form nesting
 _position_template = """
-<div style="display:flex; gap: 8px">
-    <a href="{object_id}/rule_start/" title="start">&#x21C8;</a>
-    |
-    <a href="{object_id}/rule_up/" title="up">&#x2191;</a>
-    |
-    <a href="{object_id}/rule_down/" title="down">&#x2193;</a>
-    |
-    <a href="{object_id}/rule_end/" title="end">&#x21CA;</a>
+<div style="display:flex; gap: 16px" >
+    <button
+        style="border-radius: 30%;"
+        name="rule_move_direction"
+        title="start"
+        value="start"
+        formaction="{object_id}/rule_move/"
+    >
+        &#x21C8;
+    </button>
+    <button
+        style="border-radius: 30%;"
+        name="rule_move_direction"
+        title="up" value="up"
+        formaction="{object_id}/rule_move/"
+    >
+        &#x2191;
+    </button>
+    <button
+        style="border-radius: 30%;"
+        name="rule_move_direction"
+        title="down" value="down"
+        formaction="{object_id}/rule_move/"
+    >
+        &#x2193;
+    </button>
+    <button
+        style="border-radius: 30%;"
+        name="rule_move_direction"
+        title="end"
+        value="end"
+        formaction="{object_id}/rule_move/"
+    >
+        &#x21CA;
+    </button>
 </div>
 """
 
@@ -43,7 +71,10 @@ class RuleAdmin(admin.ModelAdmin):
 
     @admin.display(ordering="position")
     def position_buttons(self, obj):
-        return format_html(_position_template, object_id=obj.id)
+        return format_html(
+            _position_template,
+            object_id=obj.id,
+        )
 
     def get_changeform_initial_data(self, request):
         initial = super().get_changeform_initial_data(request)
@@ -57,27 +88,22 @@ class RuleAdmin(admin.ModelAdmin):
                 "simulate_rules<path:test_path>",
                 self.simulate_rules,
             ),
-            path("<str:object_id>/rule_up/", self.rule_up),
-            path("<str:object_id>/rule_down/", self.rule_down),
-            path("<str:object_id>/rule_start/", self.rule_start),
-            path("<str:object_id>/rule_end/", self.rule_end),
+            path("<str:object_id>/rule_move/", self.rule_move),
             *super().get_urls(),
         ]
 
-    def rule_up(self, request, object_id):
-        self.model.objects.position_up(object_id)
-        return HttpResponseRedirect("../../")
-
-    def rule_down(self, request, object_id):
-        self.model.objects.position_down(object_id)
-        return HttpResponseRedirect("../../")
-
-    def rule_start(self, request, object_id):
-        self.model.objects.position_start(object_id)
-        return HttpResponseRedirect("../../")
-
-    def rule_end(self, request, object_id):
-        self.model.objects.position_end(object_id)
+    def rule_move(self, request, object_id):
+        direction = request.POST["rule_move_direction"]
+        if direction == "up":
+            self.model.objects.position_up(object_id)
+        elif direction == "down":
+            self.model.objects.position_down(object_id)
+        elif direction == "start":
+            self.model.objects.position_start(object_id)
+        elif direction == "end":
+            self.model.objects.position_end(object_id)
+        else:
+            return HttpResponseBadRequest()
         return HttpResponseRedirect("../../")
 
     def simulate_rules(self, request, test_path):
