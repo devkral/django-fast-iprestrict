@@ -63,7 +63,8 @@ class RuleManager(models.Manager):
 
     def _position_cleanup(self, queryset):
         u_dict = {}
-        for val in queryset.annotate(
+        # window functions don't like select_for_update
+        for val in self.all().annotate(
             position_new=Window(expression=RowNumber(), order_by="position"),
         ):
             if val.position != val.position_new:
