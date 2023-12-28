@@ -117,3 +117,24 @@ class RuleAdmin(admin.ModelAdmin):
     def delete_queryset(self, request, queryset):
         super().delete_queryset(request, queryset)
         Rule.objects.position_cleanup()
+
+
+@admin.register(RulePath)
+class RulePathAdmin(admin.ModelAdmin):
+    list_display = ("rule", "path", "is_regex")
+
+    def get_urls(self):
+        return [
+            path("<str:object_id>/change/", self.redirect_change),
+            *super().get_urls(),
+        ]
+
+    def redirect_change(self, request, object_id):
+        rulep = RulePath.objects.get(id=object_id)
+        return HttpResponseRedirect(f"../../../rule/{rulep.rule_id}/change/")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False

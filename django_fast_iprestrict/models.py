@@ -121,6 +121,9 @@ class Rule(models.Model):
             models.Index(fields=["position"]),
         ]
 
+    def __str__(self):
+        return self.name
+
     def get_processed_rule(self):
         return (
             ipaddress.ip_network(self.rule, strict=False) if self.rule != "*" else "*"
@@ -184,6 +187,9 @@ class RulePath(models.Model):
 
     class Meta:
         ordering = ("rule__position", "id")
+
+    def __str__(self):
+        return self.path
 
     def get_processed_path(self):
         return self.path if self.is_regex else re.escape(self.path)
