@@ -27,7 +27,7 @@ def fast_iprestrict(get_response):
     else:
 
         def middleware(request):
-            action = RulePath.objects.match_path_and_i(
+            action = RulePath.objects.match_path_and_ip(
                 request.path, get_ip(request), return_action=True
             )
             if not action:

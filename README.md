@@ -4,7 +4,7 @@ iprestriction based on django-fast-ratelimit (therefor the name: django-fast-ipr
 
 # settings
 
-IPRESTRICT_DEFAULT_ACTION
+IPRESTRICT_DEFAULT_ACTION: allow/deny : default action when no rule matches, default, when not set allow
 
 # TODO
 

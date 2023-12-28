@@ -23,6 +23,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
+    "django_fast_iprestrict.middleware.fast_iprestrict",
 ]
 
 TEMPLATES = [
