@@ -103,24 +103,33 @@ class RuleAdmin(admin.ModelAdmin):
     def rule_move(self, request: HttpRequest, object_id):
         direction = request.POST["rule_move_direction"]
         parent_path = dirname(request.path.rstrip("/"))
-        if direction == "up":
-            self.model.objects.position_up(
-                object_id, ip=get_ip(request), path=parent_path
+        try:
+            if direction == "up":
+                self.model.objects.position_up(
+                    object_id, ip=get_ip(request), path=parent_path
+                )
+            elif direction == "down":
+                self.model.objects.position_down(
+                    object_id, ip=get_ip(request), path=parent_path
+                )
+            elif direction == "start":
+                self.model.objects.position_start(
+                    object_id, ip=get_ip(request), path=parent_path
+                )
+            elif direction == "end":
+                self.model.objects.position_end(
+                    object_id, ip=get_ip(request), path=parent_path
+                )
+            else:
+                return HttpResponseBadRequest()
+        except LockoutException:
+            context = {**self.admin_site.each_context(request), "link_back": "../../"}
+            return TemplateResponse(
+                request,
+                "admin/django_fast_iprestrict/lockout_prevented.html",
+                context=context,
+                status=400,
             )
-        elif direction == "down":
-            self.model.objects.position_down(
-                object_id, ip=get_ip(request), path=parent_path
-            )
-        elif direction == "start":
-            self.model.objects.position_start(
-                object_id, ip=get_ip(request), path=parent_path
-            )
-        elif direction == "end":
-            self.model.objects.position_end(
-                object_id, ip=get_ip(request), path=parent_path
-            )
-        else:
-            return HttpResponseBadRequest()
         return HttpResponseRedirect("../../")
 
     def simulate_rules(self, request, test_path):
@@ -177,7 +186,7 @@ class RuleAdmin(admin.ModelAdmin):
                 extra_context=extra_context,
             )
         except LockoutException:
-            context = {**self.admin_site.each_context(request)}
+            context = {**self.admin_site.each_context(request), "link_back": "./"}
             return TemplateResponse(
                 request,
                 "admin/django_fast_iprestrict/lockout_prevented.html",
@@ -192,7 +201,7 @@ class RuleAdmin(admin.ModelAdmin):
                 extra_context=extra_context,
             )
         except LockoutException:
-            context = {**self.admin_site.each_context(request)}
+            context = {**self.admin_site.each_context(request), "link_back": "./"}
             return TemplateResponse(
                 request,
                 "admin/django_fast_iprestrict/lockout_prevented.html",
