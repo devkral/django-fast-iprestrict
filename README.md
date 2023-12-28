@@ -44,7 +44,10 @@ Note: pip >= 19 is required
 
 In the admin panel is now a section Rule and Rule Pathes. Rule pathes like `.*` can be used to match for the whole project.
 
-Note: ipv4 and ipv6 rules are not interoperable yet. If the network does not match they are skipped
+Rules are evalutated like a waterfall:
+the lowest position to the highest position. State disabled rules are skipped
+
+Note: ipv4 and ipv6 rules are not interoperable yet. If the network does not match they are skipped like if they are in state "disabled".
 
 The rule names can be used for the django-fast-ratelimit adapter:
 
@@ -77,6 +80,12 @@ poetry run ./manage.py runserver
 
 ```
 
+Note:
+
+given the lack of tests and the early development state, it is possible that some parts have erratas.
+
 # TODO
 
 -   tests
+-   localization?
+-   compare ipv6 mapped ip4 with ipv4 rules

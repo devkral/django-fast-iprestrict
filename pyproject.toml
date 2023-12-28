@@ -1,10 +1,20 @@
 [tool.poetry]
 name = "django-fast-iprestrict"
-version = "0.4.3"
+version = "0.4.4"
 description = ""
 authors = ["alex <devkral@web.de>"]
 license = "MIT"
 readme = "README.md"
+repository = "https://github.com/devkral/django-fast-iprestrict"
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Web Environment",
+  "Framework :: Django",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Security"
+]
+
 
 [tool.poetry.dependencies]
 python = ">=3.10,<4.0"
