@@ -15,9 +15,7 @@ def fast_iprestrict(get_response):
 
         async def middleware(request):
             action = get_default_action(
-                await amatch_ip_and_path(
-                    get_ip(request), request.path, return_action=True
-                )
+                (await amatch_ip_and_path(get_ip(request), request.path))[1]
             )
             if action == RULE_ACTION.deny.value:
                 raise PermissionDenied()
@@ -28,9 +26,7 @@ def fast_iprestrict(get_response):
 
         def middleware(request):
             action = get_default_action(
-                RulePath.objects.match_ip_and_path(
-                    get_ip(request), request.path, return_action=True
-                )
+                RulePath.objects.match_ip_and_path(get_ip(request), request.path)[1]
             )
             if action == RULE_ACTION.deny.value:
                 raise PermissionDenied()
