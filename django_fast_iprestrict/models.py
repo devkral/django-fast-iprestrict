@@ -137,7 +137,7 @@ class RuleManager(models.Manager):
         ip_address_user = parse_ipaddress(ip)
         result = []
         ip_matchers = self.ip_matchers_local()
-        for rule_id, item in ip_matchers:
+        for rule_id, item in ip_matchers.items():
             for network in item[0]:
                 try:
                     if network == "*" or ip_address_user in network:
@@ -260,6 +260,7 @@ class RuleSourceManager(models.Manager):
                     f'{getattr(settings, "IPRESTRICT_KEY_PREFIX", "fip:")}source_data'
                 ),
                 models.F("id"),
+                output_field=models.TextField(),
             )
         )
 

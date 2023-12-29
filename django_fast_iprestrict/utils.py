@@ -24,7 +24,7 @@ def get_default_interval():
 
 @functools.lru_cache(maxsize=512)
 def parse_ipaddress(inp):
-    ip = ipaddress.ip_address(inp, strict=False)
+    ip = ipaddress.ip_address(inp)
     mapped = getattr(ip, "ipv4_mapped", None)
     if mapped:
         ip = mapped
