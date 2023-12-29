@@ -20,3 +20,9 @@ def validate_regex(value):
         re.compile(value)
     except re.error:
         raise ValidationError("Invalid regex.", code="invalid", params={"value": value})
+
+
+def validate_generator_fn(value):
+    # TODO: expand with security checks
+    if not value.replace(".", "").isidentifier():
+        raise ValidationError("Invalid path.", code="invalid", params={"value": value})

@@ -74,7 +74,14 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "generator_fn",
-                    models.CharField(blank=True, default="", max_length=200),
+                    models.CharField(
+                        blank=True,
+                        default="",
+                        max_length=200,
+                        validators=[
+                            django_fast_iprestrict.validators.validate_generator_fn
+                        ],
+                    ),
                 ),
                 (
                     "interval",

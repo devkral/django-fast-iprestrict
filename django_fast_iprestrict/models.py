@@ -17,7 +17,7 @@ from .utils import (
     get_default_action,
     get_default_interval,
 )
-from .validators import validate_network, validate_regex
+from .validators import validate_generator_fn, validate_network, validate_regex
 
 # Create your models here.
 
@@ -213,7 +213,15 @@ class RuleSourceManager(models.Manager):
 
 class RuleSource(models.Model):
     rule = models.ForeignKey(Rule, related_name="sources", on_delete=models.CASCADE)
-    generator_fn = models.CharField(default="", max_length=200, null=False, blank=True)
+    generator_fn = models.CharField(
+        default="",
+        max_length=200,
+        null=False,
+        blank=True,
+        validators=[
+            validate_generator_fn,
+        ],
+    )
     interval = models.PositiveIntegerField(blank=True, default=get_default_interval)
     is_active = models.BooleanField(blank=True, default=True)
 
@@ -224,11 +232,18 @@ class RuleSource(models.Model):
 
     def get_processed_networks_uncached(self):
         ret = []
-        for network in import_string(self.generator_fn)():
-            try:
-                ret.append(ipaddress.ip_network(network, strict=False))
-            except TypeError:
-                pass
+        success = False
+        try:
+            validate_generator_fn(self.generator_fn)
+            success = True
+        except ValidationError:
+            pass
+        if success:
+            for network in import_string(self.generator_fn)():
+                try:
+                    ret.append(ipaddress.ip_network(network, strict=False))
+                except TypeError:
+                    pass
 
         return ret
 
