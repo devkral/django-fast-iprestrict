@@ -63,11 +63,15 @@ def foo(request):
 
 ## settings
 
+IPRESTRICT_CACHE: select cache, defaults to "default" cache
+IPRESTRICT_KEY_PREFIX: cache key prefix, defaults to "fip:"
 IPRESTRICT_DEFAULT_ACTION: "allow"/"deny" : default action when no rule matches, default, when unset is "allow". Recommended otherwise a lockout is easily possible
 IPRESTRICT_TRUSTED_PROXIES: set list of trusted proxies
 RATELIMIT_TRUSTED_PROXIES: fallback when IPRESTRICT_TRUSTED_PROXIES is unset
 IPRESTRICT_TESTCLIENT_FALLBACK: fallback for the string testclient in the ip field. Dev setting for tests
 RATELIMIT_TESTCLIENT_FALLBACK: fallback when IPRESTRICT_TESTCLIENT_FALLBACK is unset
+
+The ratelimit settings are fallbacks, so the settings must only be set on one place
 
 ## development
 
@@ -94,3 +98,4 @@ GEOIP can be done via sources (WIP)
 -   localization?
 -   compare ipv6 mapped ip4 with ipv4 rules
 -   remote fetch sources and cache them. Use get_many set_many to retrieve them
+-   docs for new settings
