@@ -1,4 +1,5 @@
 import functools
+import ipaddress
 import re
 
 from django.conf import settings
@@ -19,6 +20,20 @@ class RULE_ACTION(models.TextChoices):
 
 def get_default_interval():
     return 24 * 60 * 60
+
+
+@functools.lru_cache(maxsize=512)
+def parse_ipaddress(inp):
+    ip = ipaddress.ip_address(inp, strict=False)
+    mapped = getattr(ip, "ipv4_mapped", None)
+    if mapped:
+        ip = mapped
+    return ip
+
+
+@functools.lru_cache(maxsize=512)
+def parse_ipnetwork(inp):
+    return ipaddress.ip_network(inp, strict=False)
 
 
 @functools.lru_cache(maxsize=1)

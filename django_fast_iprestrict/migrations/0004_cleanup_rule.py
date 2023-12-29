@@ -13,4 +13,8 @@ class Migration(migrations.Migration):
             model_name="rule",
             name="rule",
         ),
+        migrations.AlterModelOptions(
+            name="rulepath",
+            options={},
+        ),
     ]

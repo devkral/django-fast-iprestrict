@@ -1,13 +1,13 @@
-import ipaddress
 import re
 from contextlib import ExitStack
 from functools import lru_cache
 
 from django.conf import settings
+from django.core.cache import caches
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Max, Window
-from django.db.models.functions import RowNumber
+from django.db.models.functions import Concat, RowNumber
 from django.db.transaction import atomic
 from django.utils.module_loading import import_string
 
@@ -16,6 +16,8 @@ from .utils import (
     LockoutException,
     get_default_action,
     get_default_interval,
+    parse_ipaddress,
+    parse_ipnetwork,
 )
 from .validators import validate_generator_fn, validate_network, validate_regex
 
@@ -39,7 +41,7 @@ class RuleManager(models.Manager):
         stack.callback(self._position_cleanup, stack.queryset)
         return stack
 
-    def clear_caches(self):
+    def clear_local_caches(self):
         RulePath.objects.path_ip_matchers.cache_clear()
         self.ip_matchers_local.cache_clear()
 
@@ -49,23 +51,23 @@ class RuleManager(models.Manager):
         if path:
             if (
                 get_default_action(
-                    RulePath.objects.match_ip_and_path(ip, path, return_action=True)
+                    RulePath.objects.match_ip_and_path(ip, path, remote=False)[1]
                 )
                 == RULE_ACTION.deny.value
             ):
                 # otherwise the caches could cause access errors until server restart
                 if clear_caches_on_error:
-                    self.clear_caches()
+                    self.clear_local_caches()
                 raise LockoutException("would lock current user out")
 
         else:
             if (
-                get_default_action(self.match_ip(ip, return_action=True))
+                get_default_action(self.match_ip(ip, remote=False)[1])
                 == RULE_ACTION.deny.value
             ):
                 # otherwise the caches could cause access errors until server restart
                 if clear_caches_on_error:
-                    self.clear_caches()
+                    self.clear_local_caches()
                 raise LockoutException("would lock current user out")
 
     def _position_cleanup(self, queryset):
@@ -78,7 +80,7 @@ class RuleManager(models.Manager):
                 u_dict[val.id] = val.position_new
         for rule_id, position in u_dict.items():
             queryset.filter(id=rule_id).update(position=position)
-        self.clear_caches()
+        self.clear_local_caches()
 
     def position_cleanup(self, ip=None, path=None):
         with self._atomic_update(ip=ip, path=path):
@@ -92,28 +94,65 @@ class RuleManager(models.Manager):
             patterns[obj.id] = (obj.get_processed_networks(), obj.action)
         return patterns
 
-    def match_ip(self, ip, return_action=False, rule_id=None):
-        ip_address_user = ipaddress.ip_address(ip, strict=False)
-        mapped = getattr(ip_address_user, "ipv4_mapped", None)
-        if mapped:
-            ip_address_user = mapped
+    def match_ip(self, ip: str, rule_id=None, remote=True):
+        ip_address_user = parse_ipaddress(ip)
         if rule_id:
             item = self.ip_matchers_local()[rule_id]
             for network in item[0]:
                 try:
                     if network == "*" or ip_address_user in network:
-                        return item[1] if return_action else rule_id
+                        return rule_id, item[1]
                 except TypeError:
                     pass
+            if remote:
+                for network in RuleSource.objects.ip_matchers_remote(rule_id):
+                    try:
+                        if ip_address_user in network:
+                            return rule_id, item[1]
+                    except TypeError:
+                        pass
+
         else:
-            for rule_id, item in self.ip_matchers_local().items():
+            ip_matchers = self.ip_matchers_local()
+            for rule_id, item in ip_matchers.items():
                 for network in item[0]:
                     try:
                         if network == "*" or ip_address_user in network:
-                            return item[1] if return_action else rule_id
+                            return rule_id, item[1]
                     except TypeError:
                         pass
-        return None
+            if remote:
+                for network in RuleSource.objects.ip_matchers_remote(
+                    ip_matchers.keys()
+                ):
+                    try:
+                        if ip_address_user in network:
+                            return rule_id, item[1]
+                    except TypeError:
+                        pass
+
+        return None, None
+
+    def match_all_ip(self, ip: str, remote=True):
+        ip_address_user = parse_ipaddress(ip)
+        result = []
+        ip_matchers = self.ip_matchers_local()
+        for rule_id, item in ip_matchers:
+            for network in item[0]:
+                try:
+                    if network == "*" or ip_address_user in network:
+                        result.append((rule_id, item[1]))
+                except TypeError:
+                    pass
+        if remote:
+            for network in RuleSource.objects.ip_matchers_remote(ip_matchers.keys()):
+                try:
+                    if ip_address_user in network:
+                        result.append((rule_id, item[1]))
+                except TypeError:
+                    pass
+
+        return result
 
     def position_start(self, rule_id, ip=None, path=None):
         with self._atomic_update(ip=ip, path=path) as stack:
@@ -189,16 +228,14 @@ class Rule(models.Model):
         if self.is_catch_all:
             return ["*"]
         return [
-            ipaddress.ip_network(network, strict=False)
+            parse_ipnetwork(network)
             for network in self.networks.filter(is_active=True).values_list(
                 "network", flat=True
             )
         ]
 
-    def match_ip(self, ip, return_action=False):
-        return type(self).objects.match_ip(
-            ip, return_action=return_action, rule_id=self.id
-        )
+    def match_ip(self, ip):
+        return type(self).objects.match_ip(ip, rule_id=self.id)
 
 
 class RuleNetwork(models.Model):
@@ -208,7 +245,47 @@ class RuleNetwork(models.Model):
 
 
 class RuleSourceManager(models.Manager):
-    pass
+    def annotate_with_cache_key(self, queryset=None):
+        if queryset is None:
+            queryset = self.get_queryset()
+        return queryset.annotate(
+            cache_key=Concat(
+                models.Value(
+                    f'{getattr(settings, "IPRESTRICT_KEY_PREFIX", "fip:")}source'
+                ),
+                models.F("id"),
+            )
+        )
+
+    def ip_matchers_remote(self, rules):
+        cache = caches[getattr(settings, "IPRESTRICT_CACHE", "default")]
+        q = models.Q(is_active=True)
+        if isinstance(rules, models.QuerySet):
+            q &= models.Q(rule__in=rules)
+        else:
+            q &= models.Q(rule_id__in=rules)
+        keys = self.annotate_with_cache_key(self.filter(q))
+
+        # unordered dict
+        result = cache.get_many(keys)
+        missing_query = self.filter(q).exclude(id__in=result.keys())
+        for source in missing_query:
+            # FIXME: double calling, some kind of locking would be good
+            networks = source.get_processed_networks_uncached()
+            cache_key = source.get_cache_key()
+            result[cache_key] = networks
+            cache.set(
+                cache_key,
+                ",".join(map(lambda x: x.compressed, networks)),
+                source.interval,
+            )
+
+        for key in result.keys():
+            value = result[key]
+            if isinstance(value, str):
+                result[key] = [parse_ipnetwork(network) for network in value.split(",")]
+
+        return result
 
 
 class RuleSource(models.Model):
@@ -228,7 +305,7 @@ class RuleSource(models.Model):
     objects = RuleSourceManager()
 
     def get_cache_key(self):
-        return f'{getattr(settings, "IPRESTRICT_KEY_PREFIX", "fip:")}{self.id}'
+        return f'{getattr(settings, "IPRESTRICT_KEY_PREFIX", "fip:")}source{self.id}'
 
     def get_processed_networks_uncached(self):
         ret = []
@@ -239,10 +316,18 @@ class RuleSource(models.Model):
         except ValidationError:
             pass
         if success:
-            for network in import_string(self.generator_fn)():
+            try:
+                ip_nets = import_string(self.generator_fn)()
+            except ImportError:
+                # FIXME: proper reporting
+                return
+            except Exception:
+                # FIXME: proper reporting
+                return
+            for network in ip_nets:
                 try:
-                    ret.append(ipaddress.ip_network(network, strict=False))
-                except TypeError:
+                    ret.append(parse_ipnetwork(network))
+                except ValueError:
                     pass
 
         return ret
@@ -250,45 +335,23 @@ class RuleSource(models.Model):
 
 class RulePathManager(models.Manager):
     @lru_cache(maxsize=1)
-    def path_ip_matchers(self):
-        patterns = []
-        last_pattern = None
-        for obj in self.exclude(rule__action=RULE_ACTION.disabled.value).select_related(
-            "rule"
-        ):
-            if not last_pattern or last_pattern[1] != obj.id:
-                if last_pattern:
-                    patterns.append((re.compile(last_pattern[0]), *last_pattern[1:]))
-                last_pattern = [
-                    obj.get_processed_path(),
-                    obj.rule.get_processed_rules(),
-                    obj.rule_id,
-                    obj.rule.action,
-                ]
-            else:
-                last_pattern[0] = "%s|%s" % (
-                    last_pattern[0],
-                    obj.get_processed_path(),
-                )
-        if last_pattern:
-            patterns.append((re.compile(last_pattern[0]), *last_pattern[1:]))
+    def path_matchers(self):
+        patterns = {}
+        for obj in self.exclude(rule__action=RULE_ACTION.disabled.value):
+            patterns.setdefault(obj.rule_id, []).append(obj.get_processed_path())
+        for key in patterns.keys():
+            patterns[key] = re.compile("|".join(patterns[key]))
         return patterns
 
-    def match_ip_and_path(self, ip, path, return_action=False):
-        ip_address_user = ipaddress.ip_address(ip, strict=False)
-        mapped = getattr(ip_address_user, "ipv4_mapped", None)
-        if mapped:
-            ip_address_user = mapped
-        for path_pattern, ip_networks, rule_id, action in self.path_ip_matchers():
-            for network in ip_networks:
-                try:
-                    if path_pattern.match(path) and (
-                        network == "*" or ip_address_user in network
-                    ):
-                        return action if return_action else rule_id
-                except TypeError:
-                    pass
-        return None
+    def match_ip_and_path(self, ip: str, path: str, remote=True):
+        # ordered
+        candidates = Rule.objects.match_all_ip(ip, remote=remote)
+        _path_matchers = self.path_matchers()
+        for rule_id, action in candidates:
+            matcher = _path_matchers.get(rule_id)
+            if matcher and matcher.match(path):
+                return rule_id, action
+        return None, None
 
 
 class RulePath(models.Model):
@@ -296,9 +359,6 @@ class RulePath(models.Model):
     path = models.TextField(max_length=4096)
     is_regex = models.BooleanField(default=False, blank=True)
     objects = RulePathManager()
-
-    class Meta:
-        ordering = ("rule__position", "id")
 
     def __str__(self):
         return self.path

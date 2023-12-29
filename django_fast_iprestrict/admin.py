@@ -147,14 +147,14 @@ class RuleAdmin(admin.ModelAdmin):
 
         test_path = request.POST.get("test_path", None) or ""
         if test_path:
-            rule_id = RulePath.objects.match_ip_and_path(test_ip, test_path)
+            rule_id = RulePath.objects.match_ip_and_path(test_ip, test_path)[0]
             self.message_user(
                 request,
                 f"Parameters: ip: {test_ip}, path: {test_path}",
                 level=INFO,
             )
         else:
-            rule_id = Rule.objects.match_ip(test_ip)
+            rule_id = Rule.objects.match_ip(test_ip)[0]
             self.message_user(
                 request,
                 f"Parameters: ip: {test_ip}",
