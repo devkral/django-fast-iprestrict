@@ -3,14 +3,21 @@ import re
 from contextlib import ExitStack
 from functools import lru_cache
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Max, Window
 from django.db.models.functions import RowNumber
 from django.db.transaction import atomic
+from django.utils.module_loading import import_string
 
-from .utils import RULE_ACTION, LockoutException, get_default_action
-from .validators import validate_regex, validate_rule
+from .utils import (
+    RULE_ACTION,
+    LockoutException,
+    get_default_action,
+    get_default_interval,
+)
+from .validators import validate_network, validate_regex
 
 # Create your models here.
 
@@ -34,7 +41,7 @@ class RuleManager(models.Manager):
 
     def clear_caches(self):
         RulePath.objects.path_ip_matchers.cache_clear()
-        self.ip_matchers.cache_clear()
+        self.ip_matchers_local.cache_clear()
 
     def lockout_check(self, ip, path=None, clear_caches_on_error=True):
         if not ip:
@@ -78,20 +85,34 @@ class RuleManager(models.Manager):
             pass
 
     @lru_cache(maxsize=1)
-    def ip_matchers(self):
-        patterns = []
+    def ip_matchers_local(self):
+        # ordered dict
+        patterns = {}
         for obj in self.exclude(action=RULE_ACTION.disabled.value):
-            patterns.append((obj.get_processed_rule(), obj.id, obj.action))
+            patterns[obj.id] = (obj.get_processed_networks(), obj.action)
         return patterns
 
-    def match_ip(self, ip, return_action=False):
-        ip_network_user = ipaddress.ip_network(ip, strict=False)
-        for ip_network, rule_id, action in self.ip_matchers():
-            try:
-                if ip_network == "*" or ip_network_user.subnet_of(ip_network):
-                    return action if return_action else rule_id
-            except TypeError:
-                pass
+    def match_ip(self, ip, return_action=False, rule_id=None):
+        ip_address_user = ipaddress.ip_address(ip, strict=False)
+        mapped = getattr(ip_address_user, "ipv4_mapped", None)
+        if mapped:
+            ip_address_user = mapped
+        if rule_id:
+            item = self.ip_matchers_local()[rule_id]
+            for network in item[0]:
+                try:
+                    if network == "*" or ip_address_user in network:
+                        return item[1] if return_action else rule_id
+                except TypeError:
+                    pass
+        else:
+            for rule_id, item in self.ip_matchers_local().items():
+                for network in item[0]:
+                    try:
+                        if network == "*" or ip_address_user in network:
+                            return item[1] if return_action else rule_id
+                    except TypeError:
+                        pass
         return None
 
     def position_start(self, rule_id, ip=None, path=None):
@@ -142,7 +163,6 @@ class Rule(models.Model):
     _trigger_cleanup = True
     position = models.PositiveIntegerField(blank=True, default=get_default_position)
     name = models.CharField(max_length=50, unique=True)
-    rule = models.CharField(max_length=50, validators=[validate_rule])
     action = models.CharField(
         max_length=1, choices=RULE_ACTION.choices, default=RULE_ACTION.allow
     )
@@ -158,22 +178,59 @@ class Rule(models.Model):
     def __str__(self):
         return self.name
 
-    def get_processed_rule(self):
+    @property
+    def is_catch_all(self):
         return (
-            ipaddress.ip_network(self.rule, strict=False) if self.rule != "*" else "*"
+            not self.sources.filter(is_active=True).exists()
+            and not self.networks.filter(is_active=True).exists()
         )
 
+    def get_processed_networks(self):
+        if self.is_catch_all:
+            return ["*"]
+        return [
+            ipaddress.ip_network(network, strict=False)
+            for network in self.networks.filter(is_active=True).values_list(
+                "network", flat=True
+            )
+        ]
+
     def match_ip(self, ip, return_action=False):
-        if self.action == RULE_ACTION.disabled.value:
-            return None
-        ip_network_user = ipaddress.ip_network(ip, strict=False)
-        ip_network = self.get_processed_rule()
-        try:
-            if ip_network == "*" or ip_network_user.subnet_of(ip_network):
-                return self.action if return_action else self.id
-        except TypeError:
-            pass
-        return None
+        return type(self).objects.match_ip(
+            ip, return_action=return_action, rule_id=self.id
+        )
+
+
+class RuleNetwork(models.Model):
+    rule = models.ForeignKey(Rule, related_name="networks", on_delete=models.CASCADE)
+    network = models.CharField(max_length=50, validators=[validate_network])
+    is_active = models.BooleanField(blank=True, default=True)
+
+
+class RuleSourceManager(models.Manager):
+    pass
+
+
+class RuleSource(models.Model):
+    rule = models.ForeignKey(Rule, related_name="sources", on_delete=models.CASCADE)
+    generator_fn = models.CharField(default="", max_length=200, null=False, blank=True)
+    interval = models.PositiveIntegerField(blank=True, default=get_default_interval)
+    is_active = models.BooleanField(blank=True, default=True)
+
+    objects = RuleSourceManager()
+
+    def get_cache_key(self):
+        return f'{getattr(settings, "IPRESTRICT_KEY_PREFIX", "fip:")}{self.id}'
+
+    def get_processed_networks_uncached(self):
+        ret = []
+        for network in import_string(self.generator_fn)():
+            try:
+                ret.append(ipaddress.ip_network(network, strict=False))
+            except TypeError:
+                pass
+
+        return ret
 
 
 class RulePathManager(models.Manager):
@@ -189,7 +246,7 @@ class RulePathManager(models.Manager):
                     patterns.append((re.compile(last_pattern[0]), *last_pattern[1:]))
                 last_pattern = [
                     obj.get_processed_path(),
-                    obj.rule.get_processed_rule(),
+                    obj.rule.get_processed_rules(),
                     obj.rule_id,
                     obj.rule.action,
                 ]
@@ -203,20 +260,24 @@ class RulePathManager(models.Manager):
         return patterns
 
     def match_ip_and_path(self, ip, path, return_action=False):
-        ip_network_user = ipaddress.ip_network(ip, strict=False)
-        for path_pattern, ip_network, rule_id, action in self.path_ip_matchers():
-            try:
-                if path_pattern.match(path) and (
-                    ip_network == "*" or ip_network_user.subnet_of(ip_network)
-                ):
-                    return action if return_action else rule_id
-            except TypeError:
-                pass
+        ip_address_user = ipaddress.ip_address(ip, strict=False)
+        mapped = getattr(ip_address_user, "ipv4_mapped", None)
+        if mapped:
+            ip_address_user = mapped
+        for path_pattern, ip_networks, rule_id, action in self.path_ip_matchers():
+            for network in ip_networks:
+                try:
+                    if path_pattern.match(path) and (
+                        network == "*" or ip_address_user in network
+                    ):
+                        return action if return_action else rule_id
+                except TypeError:
+                    pass
         return None
 
 
 class RulePath(models.Model):
-    rule = models.ForeignKey(Rule, related_name="urls", on_delete=models.CASCADE)
+    rule = models.ForeignKey(Rule, related_name="pathes", on_delete=models.CASCADE)
     path = models.TextField(max_length=4096)
     is_regex = models.BooleanField(default=False, blank=True)
     objects = RulePathManager()
@@ -236,6 +297,10 @@ class RulePath(models.Model):
             try:
                 validate_regex(self.path)
             except ValidationError as exc:
+                if exclude and "path" in exclude:
+                    raise exc
+                else:
+                    raise ValidationError({"path": exc})
                 if exclude and "path" in exclude:
                     raise exc
                 else:

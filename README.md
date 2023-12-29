@@ -84,16 +84,13 @@ Note:
 
 given the lack of tests and the early development state, it is possible that some parts have erratas.
 
-# Low priority / low interest
+# GEOIP
 
-GEOIP support. GEOIP is an inherent flawed concept (proxies) and depends on unfree APIs.
-
-I would not recommend such stuff as if the API shuts down the whole code can be thrown in the garbage bin.
-
-But anyway, maybe there is a cool way to integrate this in the library
+GEOIP can be done via sources (WIP)
 
 # TODO
 
 -   tests
 -   localization?
 -   compare ipv6 mapped ip4 with ipv4 rules
+-   remote fetch sources

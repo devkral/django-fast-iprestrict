@@ -17,6 +17,10 @@ class RULE_ACTION(models.TextChoices):
     disabled = ("c", "disabled")
 
 
+def get_default_interval():
+    return 24 * 60 * 60
+
+
 @functools.lru_cache(maxsize=1)
 def get_TRUSTED_PROXY() -> frozenset:
     setting = getattr(settings, "IPRESTRICT_TRUSTED_PROXIES", None)

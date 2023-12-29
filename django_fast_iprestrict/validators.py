@@ -4,9 +4,7 @@ import re
 from django.core.exceptions import ValidationError
 
 
-def validate_rule(value):
-    if value == "*":
-        return
+def validate_network(value):
     try:
         ipaddress.ip_network(value, strict=False)
     except ValueError:
@@ -21,8 +19,4 @@ def validate_regex(value):
     try:
         re.compile(value)
     except re.error:
-        raise ValidationError(
-            'Invalid regex.',
-            code="invalid",
-            params={"value": value}
-        )
+        raise ValidationError("Invalid regex.", code="invalid", params={"value": value})

@@ -66,11 +66,11 @@ _position_template = """
 
 @admin.register(Rule)
 class RuleAdmin(admin.ModelAdmin):
-    list_display = ("position_short", "position_buttons", "action", "name", "rule")
+    list_display = ("position_short", "position_buttons", "action", "name")
     list_display_links = ("position_short",)
-    list_editable = ("name", "action", "rule")
+    list_editable = ("name", "action")
     ordering = ("position",)
-    fields = ["name", "action", "rule"]
+    fields = ["name", "action"]
     inlines = [RulePathInlineAdmin]
 
     @admin.display(description="")
@@ -83,11 +83,6 @@ class RuleAdmin(admin.ModelAdmin):
             _position_template,
             object_id=obj.id,
         )
-
-    def get_changeform_initial_data(self, request):
-        initial = super().get_changeform_initial_data(request)
-        initial["rule"] = "*"
-        return initial
 
     def get_urls(self):
         return [
