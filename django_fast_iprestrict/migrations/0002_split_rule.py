@@ -21,6 +21,11 @@ class Migration(migrations.Migration):
                 to="django_fast_iprestrict.rule",
             ),
         ),
+        migrations.AddField(
+            model_name="rulepath",
+            name="is_active",
+            field=models.BooleanField(blank=True, default=True),
+        ),
         migrations.CreateModel(
             name="RuleNetwork",
             fields=[

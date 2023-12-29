@@ -12,14 +12,42 @@ from django.template.response import TemplateResponse
 from django.urls import path
 from django.utils.html import format_html
 
-from .models import Rule, RulePath
+from .models import Rule, RuleNetwork, RulePath, RuleSource
 from .utils import RULE_ACTION, LockoutException, get_default_action, get_ip
 
 # Register your models here.
 
 
+class RuleSubMixin:
+    def get_urls(self):
+        return [
+            path("<str:object_id>/change/", self.redirect_change),
+            *super().get_urls(),
+        ]
+
+    def redirect_change(self, request, object_id):
+        rulep = RulePath.objects.get(id=object_id)
+        return HttpResponseRedirect(f"../../../rule/{rulep.rule_id}/change/")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
 class RulePathInlineAdmin(admin.TabularInline):
     model = RulePath
+    extra = 1
+
+
+class RuleNetworkInlineAdmin(admin.TabularInline):
+    model = RuleNetwork
+    extra = 1
+
+
+class RuleSourceInlineAdmin(admin.TabularInline):
+    model = RuleSource
     extra = 1
 
 
@@ -71,7 +99,7 @@ class RuleAdmin(admin.ModelAdmin):
     list_editable = ("name", "action")
     ordering = ("position",)
     fields = ["name", "action"]
-    inlines = [RulePathInlineAdmin]
+    inlines = [RuleNetworkInlineAdmin, RuleSourceInlineAdmin, RulePathInlineAdmin]
 
     @admin.display(description="")
     def position_short(self, obj):
@@ -225,21 +253,18 @@ class RuleAdmin(admin.ModelAdmin):
 
 
 @admin.register(RulePath)
-class RulePathAdmin(admin.ModelAdmin):
-    list_display = ("rule", "path", "is_regex")
+class RulePathAdmin(RuleSubMixin, admin.ModelAdmin):
+    list_display = ("rule", "path", "is_regex", "is_active")
+    ordering = ("rule", "id")
 
-    def get_urls(self):
-        return [
-            path("<str:object_id>/change/", self.redirect_change),
-            *super().get_urls(),
-        ]
 
-    def redirect_change(self, request, object_id):
-        rulep = RulePath.objects.get(id=object_id)
-        return HttpResponseRedirect(f"../../../rule/{rulep.rule_id}/change/")
+@admin.register(RuleNetwork)
+class RuleNetworkAdmin(RuleSubMixin, admin.ModelAdmin):
+    list_display = ("rule", "network", "is_active")
+    ordering = ("rule", "id")
 
-    def has_add_permission(self, request):
-        return False
 
-    def has_change_permission(self, request, obj=None):
-        return False
+@admin.register(RuleSource)
+class RuleSourceAdmin(RuleSubMixin, admin.ModelAdmin):
+    list_display = ("rule", "generator_fn", "is_active")
+    ordering = ("rule", "id")

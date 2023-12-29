@@ -245,13 +245,19 @@ class RuleNetwork(models.Model):
 
 
 class RuleSourceManager(models.Manager):
+    def clear_remote_caches(self):
+        cache = caches[getattr(settings, "IPRESTRICT_CACHE", "default")]
+        cache.delete_many(
+            self.annotate_with_cache_key().values_list("cache_key", flat=True)
+        )
+
     def annotate_with_cache_key(self, queryset=None):
         if queryset is None:
             queryset = self.get_queryset()
         return queryset.annotate(
             cache_key=Concat(
                 models.Value(
-                    f'{getattr(settings, "IPRESTRICT_KEY_PREFIX", "fip:")}source'
+                    f'{getattr(settings, "IPRESTRICT_KEY_PREFIX", "fip:")}source_data'
                 ),
                 models.F("id"),
             )
@@ -264,12 +270,12 @@ class RuleSourceManager(models.Manager):
             q &= models.Q(rule__in=rules)
         else:
             q &= models.Q(rule_id__in=rules)
-        keys = self.annotate_with_cache_key(self.filter(q))
+        keys_query = self.annotate_with_cache_key(self.filter(q))
+        keys = keys_query.values_list("cache_key", flat=True)
 
         # unordered dict
         result = cache.get_many(keys)
-        missing_query = self.filter(q).exclude(id__in=result.keys())
-        for source in missing_query:
+        for source in keys_query.exclude(id__in=result.keys()):
             # FIXME: double calling, some kind of locking would be good
             networks = source.get_processed_networks_uncached()
             cache_key = source.get_cache_key()
@@ -305,7 +311,9 @@ class RuleSource(models.Model):
     objects = RuleSourceManager()
 
     def get_cache_key(self):
-        return f'{getattr(settings, "IPRESTRICT_KEY_PREFIX", "fip:")}source{self.id}'
+        return (
+            f'{getattr(settings, "IPRESTRICT_KEY_PREFIX", "fip:")}source_data{self.id}'
+        )
 
     def get_processed_networks_uncached(self):
         ret = []
@@ -337,7 +345,9 @@ class RulePathManager(models.Manager):
     @lru_cache(maxsize=1)
     def path_matchers(self):
         patterns = {}
-        for obj in self.exclude(rule__action=RULE_ACTION.disabled.value):
+        for obj in self.exclude(rule__action=RULE_ACTION.disabled.value).filter(
+            is_active=True
+        ):
             patterns.setdefault(obj.rule_id, []).append(obj.get_processed_path())
         for key in patterns.keys():
             patterns[key] = re.compile("|".join(patterns[key]))
@@ -358,6 +368,8 @@ class RulePath(models.Model):
     rule = models.ForeignKey(Rule, related_name="pathes", on_delete=models.CASCADE)
     path = models.TextField(max_length=4096)
     is_regex = models.BooleanField(default=False, blank=True)
+    is_active = models.BooleanField(blank=True, default=True)
+
     objects = RulePathManager()
 
     def __str__(self):
@@ -379,4 +391,5 @@ class RulePath(models.Model):
                 if exclude and "path" in exclude:
                     raise exc
                 else:
+                    raise ValidationError({"path": exc})
                     raise ValidationError({"path": exc})
