@@ -93,4 +93,4 @@ GEOIP can be done via sources (WIP)
 -   tests
 -   localization?
 -   compare ipv6 mapped ip4 with ipv4 rules
--   remote fetch sources
+-   remote fetch sources and cache them. Use get_many set_many to retrieve them
