@@ -65,7 +65,7 @@ def foo(request):
 
 IPRESTRICT_CACHE: select cache, defaults to "default" cache
 IPRESTRICT_KEY_PREFIX: cache key prefix, defaults to "fip:"
-IPRESTRICT_DEFAULT_ACTION: "allow"/"deny" : default action when no rule matches, default, when unset is "allow". Recommended otherwise a lockout is easily possible
+IPRESTRICT_DEFAULT_ACTION: "allow"/"deny" : default action when no rule matches, default, when unset is "allow". "allow" or unset is strongly recommended except you want to set the rules programmatically
 IPRESTRICT_TRUSTED_PROXIES: set list of trusted proxies
 RATELIMIT_TRUSTED_PROXIES: fallback when IPRESTRICT_TRUSTED_PROXIES is unset
 IPRESTRICT_TESTCLIENT_FALLBACK: fallback for the string testclient in the ip field. Dev setting for tests

@@ -25,6 +25,13 @@ django-fast-ratelimit = {version = ">=3.0.0", optional=true }
 ratelimit = [
     "django-fast-ratelimit",
 ]
+[tool.poetry.group.test.dependencies]
+tox = "*"
+django-fast-ratelimit = "*"
+
+[tool.poetry.group.dev.dependencies]
+tox = "*"
+faker = "*"
 
 [build-system]
 requires = ["poetry-core"]
