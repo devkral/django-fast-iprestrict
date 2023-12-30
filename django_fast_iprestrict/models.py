@@ -90,28 +90,33 @@ class RuleManager(models.Manager):
     def ip_matchers_local(self, generic=False):
         # ordered dict
         patterns = {}
-        queryset = self.exclude(action=RULE_ACTION.disabled.value)
+        queryset = self.annotate(
+            has_networks=models.Exists(
+                RuleNetwork.objects.filter(
+                    is_active=True, rule_id=models.OuterRef("id")
+                )
+            ),
+            has_sources=models.Exists(
+                RuleSource.objects.filter(is_active=True, rule_id=models.OuterRef("id"))
+            ),
+            has_pathes=models.Exists(
+                RulePath.objects.filter(is_active=True, rule_id=models.OuterRef("id"))
+            ),
+        )
         if not generic:
             # non catchalls are excluded, when without network/source
-            queryset = queryset.filter(
-                models.Exists(
-                    RuleNetwork.objects.filter(
-                        is_active=True, rule_id=models.OuterRef("id")
-                    )
-                )
-                | models.Exists(
-                    RuleSource.objects.filter(
-                        is_active=True, rule_id=models.OuterRef("id")
-                    )
-                )
-                | ~models.Exists(
-                    RulePath.objects.filter(
-                        is_active=True, rule_id=models.OuterRef("id")
-                    )
-                )
+            queryset = queryset.exclude(
+                models.Q(has_sources=False, has_networks=False, has_pathes=True)
+            ).exclude(action=RULE_ACTION.disabled.value)
+        for obj in queryset.distinct():
+            patterns[obj.id] = (
+                ["*"]
+                if not obj.has_networks and not obj.has_sources
+                else obj.get_processed_networks(),
+                obj.action,
+                # annotated
+                not obj.has_networks and not obj.has_sources,
             )
-        for obj in queryset:
-            patterns[obj.id] = (obj.get_processed_networks(), obj.action)
         return patterns
 
     def match_ip(self, ip: str, rule_id=None, remote=True):
@@ -237,16 +242,11 @@ class Rule(models.Model):
     def __str__(self):
         return self.name
 
-    @property
-    def is_catch_all(self):
-        return (
-            not self.sources.filter(is_active=True).exists()
-            and not self.networks.filter(is_active=True).exists()
-        )
+    def is_catch_all(self, also_disabled=False):
+        rule = type(self).objects.ip_matchers_local(also_disabled).get(self.id)
+        return bool(rule and rule[2])
 
     def get_processed_networks(self):
-        if self.is_catch_all:
-            return ["*"]
         return [
             parse_ipnetwork(network)
             for network in self.networks.filter(is_active=True).values_list(
@@ -376,13 +376,15 @@ class RulePathManager(models.Manager):
 
     def match_ip_and_path(self, ip: str, path: str, remote=True):
         # ordered
-        # with generic = pathless, non-catchall candidates are included
+        # with generic = pathless, non-catchall and disabled candidates are included
         candidates = Rule.objects.match_all_ip(ip, remote=remote, generic=True)
         _path_matchers = self.path_matchers()
         for rule_id, action in candidates:
+            if action == RULE_ACTION.disabled.value:
+                continue
             matcher = _path_matchers.get(rule_id, None)
             # matcher is None, catchall for pathes (can be also a real catch all)
-            if matcher is None or matcher.match(path):
+            if matcher and matcher.match(path):
                 return rule_id, action
         return None, None
 

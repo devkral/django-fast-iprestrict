@@ -24,7 +24,8 @@ class SyncTests(TestCase):
                 response = self.client.get(page)
                 self.assertEqual(response.status_code, 200)
         rule = Rule.objects.create(name="test", action=RULE_ACTION.disabled)
-        self.assertTrue(rule.is_catch_all)
+        self.assertFalse(rule.is_catch_all())
+        self.assertTrue(rule.is_catch_all(also_disabled=True))
         for page in admin_index_pages:
             with self.subTest(
                 "plain (with disabled rules) for page: %(page)s", page=page
@@ -35,13 +36,13 @@ class SyncTests(TestCase):
         rule.save()
         with self.assertRaises(LockoutException):
             Rule.objects.lockout_check(ip="127.0.0.1")
-        with self.assertRaises(LockoutException):
-            Rule.objects.lockout_check(ip="127.0.0.1", path="/foobar/")
+        Rule.objects.lockout_check(ip="127.0.0.1", path="/foobar/")
         rule.pathes.create(path="/foobar/")
         Rule.objects.lockout_check(ip="127.0.0.1")
         with self.assertRaises(LockoutException):
             Rule.objects.lockout_check(ip="127.0.0.1", path="/foobar/")
         rule_allow_all = Rule.objects.create(name="allow_all", action=RULE_ACTION.allow)
+        rule_allow_all.pathes.create(path=".*", is_regex=True)
         Rule.objects.lockout_check(ip="127.0.0.1")
         with self.assertRaises(LockoutException):
             Rule.objects.lockout_check(ip="127.0.0.1", path="/foobar/")
