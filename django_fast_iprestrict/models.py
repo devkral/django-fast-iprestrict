@@ -42,16 +42,16 @@ class RuleManager(models.Manager):
         return stack
 
     def clear_local_caches(self):
-        RulePath.objects.path_ip_matchers.cache_clear()
+        RulePath.objects.path_matchers.cache_clear()
         self.ip_matchers_local.cache_clear()
 
-    def lockout_check(self, ip, path=None, clear_caches_on_error=True):
+    def lockout_check(self, ip, path=None, clear_caches_on_error=True, remote=False):
         if not ip:
             return
         if path:
             if (
                 get_default_action(
-                    RulePath.objects.match_ip_and_path(ip, path, remote=False)[1]
+                    RulePath.objects.match_ip_and_path(ip, path, remote=remote)[1]
                 )
                 == RULE_ACTION.deny.value
             ):
@@ -62,7 +62,7 @@ class RuleManager(models.Manager):
 
         else:
             if (
-                get_default_action(self.match_ip(ip, remote=False)[1])
+                get_default_action(self.match_ip(ip, remote=remote)[1])
                 == RULE_ACTION.deny.value
             ):
                 # otherwise the caches could cause access errors until server restart
@@ -86,11 +86,31 @@ class RuleManager(models.Manager):
         with self._atomic_update(ip=ip, path=path):
             pass
 
-    @lru_cache(maxsize=1)
-    def ip_matchers_local(self):
+    @lru_cache(maxsize=2)
+    def ip_matchers_local(self, generic=False):
         # ordered dict
         patterns = {}
-        for obj in self.exclude(action=RULE_ACTION.disabled.value):
+        queryset = self.exclude(action=RULE_ACTION.disabled.value)
+        if not generic:
+            # non catchalls are excluded, when without network/source
+            queryset = queryset.filter(
+                models.Exists(
+                    RuleNetwork.objects.filter(
+                        is_active=True, rule_id=models.OuterRef("id")
+                    )
+                )
+                | models.Exists(
+                    RuleSource.objects.filter(
+                        is_active=True, rule_id=models.OuterRef("id")
+                    )
+                )
+                | ~models.Exists(
+                    RulePath.objects.filter(
+                        is_active=True, rule_id=models.OuterRef("id")
+                    )
+                )
+            )
+        for obj in queryset:
             patterns[obj.id] = (obj.get_processed_networks(), obj.action)
         return patterns
 
@@ -133,10 +153,10 @@ class RuleManager(models.Manager):
 
         return None, None
 
-    def match_all_ip(self, ip: str, remote=True):
+    def match_all_ip(self, ip: str, remote=True, generic=False):
         ip_address_user = parse_ipaddress(ip)
         result = []
-        ip_matchers = self.ip_matchers_local()
+        ip_matchers = self.ip_matchers_local(generic=generic)
         for rule_id, item in ip_matchers.items():
             for network in item[0]:
                 try:
@@ -356,11 +376,13 @@ class RulePathManager(models.Manager):
 
     def match_ip_and_path(self, ip: str, path: str, remote=True):
         # ordered
-        candidates = Rule.objects.match_all_ip(ip, remote=remote)
+        # with generic = pathless, non-catchall candidates are included
+        candidates = Rule.objects.match_all_ip(ip, remote=remote, generic=True)
         _path_matchers = self.path_matchers()
         for rule_id, action in candidates:
-            matcher = _path_matchers.get(rule_id)
-            if matcher and matcher.match(path):
+            matcher = _path_matchers.get(rule_id, None)
+            # matcher is None, catchall for pathes (can be also a real catch all)
+            if matcher is None or matcher.match(path):
                 return rule_id, action
         return None, None
 
