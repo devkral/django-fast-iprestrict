@@ -23,6 +23,8 @@ from .validators import validate_generator_fn, validate_network, validate_regex
 
 # Create your models here.
 
+_empty = frozenset()
+
 
 def get_default_position():
     return Rule.objects.aggregate(Max("position", default=0))["position__max"] + 1
@@ -132,15 +134,24 @@ class RuleManager(models.Manager):
                 except TypeError:
                     pass
             if remote:
-                for network in RuleSource.objects.ip_matchers_remote([rule_id]):
-                    try:
-                        if ip_address_user in network:
-                            return rule_id, item[1]
-                    except TypeError:
-                        pass
+                for remote_networks in RuleSource.objects.ip_matchers_remote(
+                    [rule_id]
+                ).values():
+                    # maximal one
+                    for network in remote_networks:
+                        try:
+                            if ip_address_user in network:
+                                return rule_id, item[1]
+                        except TypeError:
+                            pass
 
         else:
             ip_matchers = self.ip_matchers_local()
+            ip_matchers_remote = (
+                RuleSource.objects.ip_matchers_remote(ip_matchers.keys())
+                if remote
+                else {}
+            )
             for rule_id, item in ip_matchers.items():
                 for network in item[0]:
                     try:
@@ -148,34 +159,39 @@ class RuleManager(models.Manager):
                             return rule_id, item[1]
                     except TypeError:
                         pass
-            if remote:
-                for network in RuleSource.objects.ip_matchers_remote(
-                    ip_matchers.keys()
-                ):
+
+                for network in ip_matchers_remote.get(str(rule_id), _empty):
                     try:
                         if ip_address_user in network:
                             return rule_id, item[1]
                     except TypeError:
                         pass
-
         return None, None
 
     def match_all_ip(self, ip: str, remote=True, generic=False):
         ip_address_user = parse_ipaddress(ip)
         result = []
         ip_matchers = self.ip_matchers_local(generic=generic)
+        ip_matchers_remote = (
+            RuleSource.objects.ip_matchers_remote(ip_matchers.keys()) if remote else {}
+        )
         for rule_id, item in ip_matchers.items():
+            found_local_network = False
             for network in item[0]:
                 try:
                     if network == "*" or ip_address_user in network:
                         result.append((rule_id, item[1]))
+                        found_local_network = True
+                        break
                 except TypeError:
                     pass
-        if remote:
-            for network in RuleSource.objects.ip_matchers_remote(ip_matchers.keys()):
+            if found_local_network:
+                continue
+            for network in ip_matchers_remote.get(str(rule_id), _empty):
                 try:
                     if ip_address_user in network:
                         result.append((rule_id, item[1]))
+                        break
                 except TypeError:
                     pass
 
@@ -276,12 +292,15 @@ class RuleSourceManager(models.Manager):
     def annotate_with_cache_key(self, queryset=None):
         if queryset is None:
             queryset = self.get_queryset()
+        # last is rule id for easy extraction
         return queryset.annotate(
             cache_key=Concat(
                 models.Value(
-                    f'{getattr(settings, "IPRESTRICT_KEY_PREFIX", "fip:")}source_data'
+                    f'{getattr(settings, "IPRESTRICT_KEY_PREFIX", "fip:")}source_data:'
                 ),
                 models.F("id"),
+                models.Value(":"),
+                models.F("rule_id"),
                 output_field=models.TextField(),
             )
         )
@@ -300,13 +319,14 @@ class RuleSourceManager(models.Manager):
         cache_result = cache.get_many(keys)
         last_interval = None
         to_set = {}
+        result = {}
         for source in keys_query.exclude(cache_key__in=cache_result.keys()).order_by(
             "interval"
         ):
             # FIXME: double calling, some kind of locking would be good
             networks = source.get_processed_networks_uncached()
             cache_key = source.get_cache_key()
-            cache_result[cache_key] = networks
+            result.setdefault(cache_key.rsplit(":", 1)[-1], []).extend(networks)
             if last_interval is not None and last_interval != source.interval:
                 cache.set_many(to_set, last_interval)
                 to_set = {}
@@ -315,18 +335,16 @@ class RuleSourceManager(models.Manager):
         if last_interval is not None:
             cache.set_many(to_set, last_interval)
 
-        networks = []
-        for value in cache_result.values():
+        for cache_key, value in cache_result.items():
             if isinstance(value, str):
+                result_key = cache_key.rsplit(":", 1)[-1]
+                networks = result.setdefault(result_key, [])
                 for network_str in value.split(","):
                     try:
                         networks.append(parse_ipnetwork(network_str))
                     except ValueError:
                         pass
-            else:
-                networks.extend(value)
-
-        return networks
+        return result
 
 
 class RuleSource(models.Model):
@@ -346,9 +364,8 @@ class RuleSource(models.Model):
     objects = RuleSourceManager()
 
     def get_cache_key(self):
-        return (
-            f'{getattr(settings, "IPRESTRICT_KEY_PREFIX", "fip:")}source_data{self.id}'
-        )
+        # last is rule id for easy extraction
+        return f'{getattr(settings, "IPRESTRICT_KEY_PREFIX", "fip:")}source_data:{self.id}:{self.rule_id}'
 
     def get_processed_networks_uncached(self):
         ret = []

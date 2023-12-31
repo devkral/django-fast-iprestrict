@@ -42,12 +42,22 @@ Note: pip >= 19 is required
 
 ## usage
 
-In the admin panel is now a section Rule and Rule Pathes. Rule pathes like `.*` can be used to match for the whole project.
+### admin panel
+
+In the admin panel is now a section Ip Restrict.
+It contains multiple subsections from which only Rule allows to create new objects.
+The other subsections are only an overview.
+
+All of these subsections contain a test utility for checking arbitary pathes and ips
+
+Rule pathes like `.*` can be used to match for the whole project.
 
 Rules are evalutated like a waterfall:
 the lowest position to the highest position. State disabled rules are skipped
 
-Note: ipv4 and ipv6 rules are not interoperable yet. If the network does not match they are skipped like if they are in state "disabled".
+Note: ipv4 and ipv6 rules are not interoperable. If the network does not match they are skipped like if they are in state "disabled".
+
+### programmatically
 
 The rule names can be used for the django-fast-ratelimit adapter:
 
@@ -67,6 +77,24 @@ def foo(request):
     return ""
 
 ```
+
+## behaviour
+
+### ipv4 ipv6
+
+mapped ipv4 addresses are extracted to plain ipv4 addresses.
+Networks only match if their type is matching to the ip. Therefor IPv4 networks will be ignored when checking an IPv6 address
+
+### catch alls
+
+When a rule has neither an active network, source nor path it is treated as a catch all for match_ip. This means it resolves for every ip.
+
+A such catch all is not used for path checks. When a path is added to the catch all the behaviour changes:
+
+when the path matches and no network nor source is attached to the rule, it resolves without an ip check.
+
+This allows a path catch all with a path like:
+`.*` with is_regex set
 
 ## settings
 
