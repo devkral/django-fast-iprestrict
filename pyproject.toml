@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "django-fast-iprestrict"
-version = "0.5.0a2"
+version = "0.5.0"
 description = ""
 authors = ["alex <devkral@web.de>"]
 license = "MIT"
