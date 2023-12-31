@@ -160,7 +160,9 @@ class RuleAdmin(admin.ModelAdmin):
         return HttpResponseRedirect("../../")
 
     def simulate_rules(self, request, test_path):
-        rule_id, action = RulePath.objects.match_ip_and_path(get_ip(request), test_path)
+        rule_id, action, is_catch_all, ratelimits = RulePath.objects.match_ip_and_path(
+            get_ip(request), test_path
+        )
         if action:
             if action == RULE_ACTION.deny.value:
                 raise PermissionDenied()

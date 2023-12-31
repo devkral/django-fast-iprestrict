@@ -16,6 +16,7 @@ class RULE_ACTION(models.TextChoices):
     allow = ("a", "allow")
     deny = ("b", "deny")
     disabled = ("c", "disabled")
+    only_ratelimit = ("d", "only apply ratelimit")
 
 
 def get_default_interval():

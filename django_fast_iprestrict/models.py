@@ -19,11 +19,17 @@ from .utils import (
     parse_ipaddress,
     parse_ipnetwork,
 )
-from .validators import validate_generator_fn, validate_network, validate_regex
+from .validators import (
+    validate_generator_fn,
+    validate_network,
+    validate_rate,
+    validate_ratelimit_key,
+    validate_regex,
+)
 
 # Create your models here.
 
-_empty = frozenset()
+_empty = ()
 
 
 def get_default_position():
@@ -52,9 +58,7 @@ class RuleManager(models.Manager):
             return
         if path:
             if (
-                get_default_action(
-                    RulePath.objects.match_ip_and_path(ip, path, remote=remote)[1]
-                )
+                RulePath.objects.match_ip_and_path(ip, path, remote=remote)[1]
                 == RULE_ACTION.deny.value
             ):
                 # otherwise the caches could cause access errors until server restart
@@ -63,10 +67,7 @@ class RuleManager(models.Manager):
                 raise LockoutException("would lock current user out")
 
         else:
-            if (
-                get_default_action(self.match_ip(ip, remote=remote)[1])
-                == RULE_ACTION.deny.value
-            ):
+            if self.match_ip(ip, remote=remote)[1] == RULE_ACTION.deny.value:
                 # otherwise the caches could cause access errors until server restart
                 if clear_caches_on_error:
                     self.clear_local_caches()
@@ -118,6 +119,7 @@ class RuleManager(models.Manager):
                 RULE_ACTION(obj.action),
                 # annotated
                 not obj.has_networks and not obj.has_sources,
+                obj.get_ratelimit_dicts(),
             )
         return patterns
 
@@ -126,11 +128,11 @@ class RuleManager(models.Manager):
         if rule_id:
             item = self.ip_matchers_local().get(rule_id, None)
             if not item:
-                return None, None
+                return None, get_default_action(), False, _empty
             for network in item[0]:
                 try:
                     if network == "*" or ip_address_user in network:
-                        return rule_id, item[1]
+                        return rule_id, *item[1:]
                 except TypeError:
                     pass
             if remote:
@@ -141,7 +143,7 @@ class RuleManager(models.Manager):
                     for network in remote_networks:
                         try:
                             if ip_address_user in network:
-                                return rule_id, item[1]
+                                return rule_id, *item[1:]
                         except TypeError:
                             pass
 
@@ -156,19 +158,20 @@ class RuleManager(models.Manager):
                 for network in item[0]:
                     try:
                         if network == "*" or ip_address_user in network:
-                            return rule_id, item[1]
+                            return rule_id, *item[1:]
                     except TypeError:
                         pass
 
                 for network in ip_matchers_remote.get(str(rule_id), _empty):
                     try:
                         if ip_address_user in network:
-                            return rule_id, item[1]
+                            return rule_id, *item[1:]
                     except TypeError:
                         pass
-        return None, None
+        return None, get_default_action(), False, _empty
 
     def match_all_ip(self, ip: str, remote=True, generic=False):
+        # note: cannot apply ratelimit here
         ip_address_user = parse_ipaddress(ip)
         result = []
         ip_matchers = self.ip_matchers_local(generic=generic)
@@ -180,7 +183,7 @@ class RuleManager(models.Manager):
             for network in item[0]:
                 try:
                     if network == "*" or ip_address_user in network:
-                        result.append((rule_id, item[1]))
+                        result.append((rule_id, *item[1:]))
                         found_local_network = True
                         break
                 except TypeError:
@@ -190,7 +193,7 @@ class RuleManager(models.Manager):
             for network in ip_matchers_remote.get(str(rule_id), _empty):
                 try:
                     if ip_address_user in network:
-                        result.append((rule_id, item[1]))
+                        result.append((rule_id, *item[1:]))
                         break
                 except TypeError:
                     pass
@@ -246,7 +249,7 @@ class Rule(models.Model):
     position = models.PositiveIntegerField(blank=True, default=get_default_position)
     name = models.CharField(max_length=50, unique=True)
     action = models.CharField(
-        max_length=1, choices=RULE_ACTION.choices, default=RULE_ACTION.allow
+        max_length=1, choices=RULE_ACTION.choices, default=RULE_ACTION.disabled
     )
     objects = RuleManager()
 
@@ -272,8 +275,37 @@ class Rule(models.Model):
             )
         ]
 
+    def get_ratelimit_dicts(self):
+        return list(
+            self.ratelimits.filter(is_active=True).values(
+                "key", "group", "decorate_name", "block", "wait"
+            )
+        )
+
     def match_ip(self, ip, remote=True):
         return type(self).objects.match_ip(ip, rule_id=self.id, remote=remote)
+
+
+class RuleRatelimitManager(models.Manager):
+    pass
+
+
+class RuleRatelimit(models.Model):
+    rule = models.ForeignKey(Rule, related_name="ratelimits", on_delete=models.CASCADE)
+    key = models.CharField(
+        max_length=200,
+        validators=[
+            validate_ratelimit_key,
+        ],
+    )
+    group = models.CharField(max_length=50)
+    decorate_name = models.CharField(max_length=50, default="ratelimit", blank=True)
+    rate = models.CharField(max_length=10, validators=[validate_rate])
+    block = models.BooleanField(blank=True, default=False)
+    wait = models.BooleanField(blank=True, default=False)
+    is_active = models.BooleanField(blank=True, default=True)
+
+    objects = RuleRatelimitManager()
 
 
 class RuleNetwork(models.Model):
@@ -350,10 +382,7 @@ class RuleSourceManager(models.Manager):
 class RuleSource(models.Model):
     rule = models.ForeignKey(Rule, related_name="sources", on_delete=models.CASCADE)
     generator_fn = models.CharField(
-        default="",
         max_length=200,
-        null=False,
-        blank=True,
         validators=[
             validate_generator_fn,
         ],
@@ -410,14 +439,18 @@ class RulePathManager(models.Manager):
         # with generic = pathless, non-catchall and disabled candidates are included
         candidates = Rule.objects.match_all_ip(ip, remote=remote, generic=True)
         _path_matchers = self.path_matchers()
-        for rule_id, action in candidates:
+        ratelimits = []
+        for rule_id, action, is_catch_all, _ratelimits in candidates:
             if action == RULE_ACTION.disabled:
                 continue
             matcher = _path_matchers.get(rule_id, None)
             # matcher is None, catchall for pathes (can be also a real catch all)
             if matcher and matcher.match(path):
-                return rule_id, action
-        return None, None
+                ratelimits.extend(_ratelimits)
+                if action == RULE_ACTION.only_ratelimit:
+                    continue
+                return rule_id, action, is_catch_all, ratelimits
+        return None, get_default_action(), False, ratelimits
 
 
 class RulePath(models.Model):

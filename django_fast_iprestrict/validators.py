@@ -2,6 +2,7 @@ import ipaddress
 import re
 
 from django.core.exceptions import ValidationError
+from django.core.validators import MinLengthValidator
 
 
 def validate_network(value):
@@ -34,7 +35,19 @@ def validate_regex(value):
         raise ValidationError("Invalid regex.", code="invalid", params={"value": value})
 
 
+min_length_1 = MinLengthValidator(1)
+
+
+def validate_ratelimit_key(value):
+    min_length_1(value)
+    if not value.isidentifier():
+        raise ValidationError(
+            "not a safe ratelimit key.", code="invalid", params={"value": value}
+        )
+
+
 def validate_generator_fn(value):
+    min_length_1(value)
     # TODO: expand security checks
     if not all(map(lambda x: x.isidentifier(), value.split("."))):
         raise ValidationError("Invalid path.", code="invalid", params={"value": value})
@@ -42,3 +55,12 @@ def validate_generator_fn(value):
         raise ValidationError(
             "not a valid generator function.", code="invalid", params={"value": value}
         )
+
+
+_rate = re.compile(r"(\d+)/(\d+)?([smhdw])?")
+
+
+def validate_rate(value):
+    matched = _rate.match(value)
+    if not matched:
+        raise ValidationError("Invalid rate", code="invalid", params={"value": value})

@@ -3,11 +3,7 @@ from django.contrib.auth.models import User
 from django.test import RequestFactory, TestCase
 
 from django_fast_iprestrict.models import Rule
-from django_fast_iprestrict.utils import (
-    RULE_ACTION,
-    LockoutException,
-    get_default_action,
-)
+from django_fast_iprestrict.utils import RULE_ACTION, LockoutException
 
 admin_index_pages = [
     "/admin/django_fast_iprestrict/",
@@ -78,19 +74,13 @@ class SyncTests(TestCase):
         rule.sources.create(
             generator_fn="tests.test_basic.test_iprestrict_gen", interval=5
         )
+        self.assertEqual(rule.match_ip(ip="127.0.0.1")[1], RULE_ACTION.allow)
         self.assertEqual(
-            get_default_action(rule.match_ip(ip="127.0.0.1")[1]), RULE_ACTION.allow
-        )
-        self.assertEqual(
-            get_default_action(rule.match_ip(ip="127.0.0.2", remote=False)[1]),
+            rule.match_ip(ip="127.0.0.2", remote=False)[1],
             RULE_ACTION.allow,
         )
-        self.assertEqual(
-            get_default_action(rule.match_ip(ip="127.0.0.2")[1]), RULE_ACTION.deny
-        )
-        self.assertEqual(
-            get_default_action(rule.match_ip(ip="::2")[1]), RULE_ACTION.deny
-        )
+        self.assertEqual(rule.match_ip(ip="127.0.0.2")[1], RULE_ACTION.deny)
+        self.assertEqual(rule.match_ip(ip="::2")[1], RULE_ACTION.deny)
 
     def test_ratelimit_plain(self):
         factory = RequestFactory()
