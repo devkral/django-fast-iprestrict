@@ -15,6 +15,6 @@ class Migration(migrations.Migration):
         ),
         migrations.AlterModelOptions(
             name="rulepath",
-            options={},
+            options={"verbose_name_plural": "Rule Pathes"},
         ),
     ]

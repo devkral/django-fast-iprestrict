@@ -36,19 +36,23 @@ class RuleSubMixin:
         return False
 
 
-class RulePathInlineAdmin(admin.TabularInline):
+class ExtraOnlyOnInitialMixin:
+    extra = 1
+
+    def get_extra(self, request, obj=None, **kwargs):
+        return self.extra if not obj else 0
+
+
+class RulePathInlineAdmin(ExtraOnlyOnInitialMixin, admin.StackedInline):
     model = RulePath
-    extra = 1
 
 
-class RuleNetworkInlineAdmin(admin.TabularInline):
+class RuleNetworkInlineAdmin(ExtraOnlyOnInitialMixin, admin.TabularInline):
     model = RuleNetwork
-    extra = 1
 
 
-class RuleSourceInlineAdmin(admin.TabularInline):
+class RuleSourceInlineAdmin(ExtraOnlyOnInitialMixin, admin.TabularInline):
     model = RuleSource
-    extra = 1
 
 
 # reuse the existing form to prevent form nesting

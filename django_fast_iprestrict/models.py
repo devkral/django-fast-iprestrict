@@ -411,6 +411,9 @@ class RulePath(models.Model):
 
     objects = RulePathManager()
 
+    class Meta:
+        verbose_name_plural = "Rule Pathes"
+
     def __str__(self):
         return self.path
 
