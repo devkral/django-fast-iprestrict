@@ -83,13 +83,13 @@ bcrypt = ["bcrypt"]
 
 [[package]]
 name = "django-fast-ratelimit"
-version = "4.1.0"
+version = "4.1.1"
 description = "Fast ratelimit implementation with django caches"
 optional = false
 python-versions = ">=3.9,<4.0"
 files = [
-    {file = "django_fast_ratelimit-4.1.0-py3-none-any.whl", hash = "sha256:2355edd7962cf3a6ff231f75fad7b08651a92080104e2cb5d5c734ff64b16c58"},
-    {file = "django_fast_ratelimit-4.1.0.tar.gz", hash = "sha256:6e4ed029f31af50c897e0d46b2f849f25161cc4bb1d58d77a4fb24aac3f77aa8"},
+    {file = "django_fast_ratelimit-4.1.1-py3-none-any.whl", hash = "sha256:28abfccc1e4dd72fdf42efb1917fde4b9f69e1169d9b9593ac83605828dcaf6a"},
+    {file = "django_fast_ratelimit-4.1.1.tar.gz", hash = "sha256:542308e1ef4e107a4518d2c2d352135dd5fd3d5af48299f6e2bd811d791f789f"},
 ]
 
 [package.dependencies]
@@ -312,4 +312,4 @@ ratelimit = ["django-fast-ratelimit"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<4.0"
-content-hash = "5cfe77b6b87bd229ba0e941ef50d9361b138f4a302e0d259de4a5136b538a769"
+content-hash = "89147a86cf50669278fbb63e71f4a35e8ed226ecd5da06ba33166831ba904c2c"

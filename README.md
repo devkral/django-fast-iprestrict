@@ -55,9 +55,16 @@ The rule names can be used for the django-fast-ratelimit adapter:
 
 import ratelimit
 
-@ratelimit.decorate(key="django_fast_iprestrict.apply_iprestrict", groups="rulename")
+r = ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict", groups="rulename", rate="1/1s")
+
+# or when only checking ips and not pathes (when pathes are available)
+
+r = ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict:ignore_pathes", groups="rulename", rate="1/1s")
+
+# or as decorator
+@ratelimit(key="django_fast_iprestrict.apply_iprestrict", groups="rulename", rate="1/1s")
 def foo(request):
-    return "
+    return ""
 
 ```
 
@@ -94,8 +101,6 @@ GEOIP can be done via sources (WIP)
 
 # TODO
 
--   tests
 -   localization?
--   compare ipv6 mapped ip4 with ipv4 rules
 -   remote fetch sources and cache them. Use get_many set_many to retrieve them
 -   docs for new settings

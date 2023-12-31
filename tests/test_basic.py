@@ -1,5 +1,6 @@
+import ratelimit
 from django.contrib.auth.models import User
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
 
 from django_fast_iprestrict.models import Rule
 from django_fast_iprestrict.utils import RULE_ACTION, LockoutException
@@ -63,6 +64,67 @@ class SyncTests(TestCase):
             for page in admin_index_pages:
                 response = self.client.get(page)
                 self.assertEqual(response.status_code, 200)
+
+    def test_ratelimit_plain(self):
+        factory = RequestFactory()
+        rule = Rule.objects.create(name="test", action=RULE_ACTION.deny)
+        request = factory.get("/foobar/")
+        r = ratelimit.get_ratelimit(
+            request=request,
+            key="django_fast_iprestrict.apply_iprestrict",
+            group="test",
+            rate="1/1s",
+        )
+        self.assertGreaterEqual(r.request_limit, 1)
+        rule.action = RULE_ACTION.allow.value
+        rule.save()
+        request = factory.get("/foobar/")
+        r = ratelimit.get_ratelimit(
+            request=request,
+            key="django_fast_iprestrict.apply_iprestrict",
+            group="test",
+            rate="1/1s",
+        )
+        self.assertGreaterEqual(r.request_limit, 0)
+
+    def test_ratelimit_pathes(self):
+        factory = RequestFactory()
+        rule = Rule.objects.create(name="test", action=RULE_ACTION.deny)
+        rule.pathes.create(path="/foobar/")
+        request = factory.get("/foobar/")
+        r = ratelimit.get_ratelimit(
+            request=request,
+            key="django_fast_iprestrict.apply_iprestrict",
+            group="test",
+            rate="1/1s",
+        )
+        self.assertGreaterEqual(r.request_limit, 1)
+        request = factory.get("/foobar2/")
+        r = ratelimit.get_ratelimit(
+            request=request,
+            key="django_fast_iprestrict.apply_iprestrict",
+            group="test",
+            rate="1/1s",
+        )
+        self.assertEqual(r.request_limit, 0)
+        request = factory.get("/foobar2/")
+        r = ratelimit.get_ratelimit(
+            request=request,
+            key="django_fast_iprestrict.apply_iprestrict:ignore_pathes",
+            group="test",
+            rate="1/1s",
+        )
+        self.assertEqual(r.request_limit, 0)  # is not a catch all because of pathes
+        rule.networks.create(network="0.0.0.0/0")
+        rule.networks.create(network="::/0")
+        request = factory.get("/foobar2/")
+        r = ratelimit.get_ratelimit(
+            request=request,
+            key="django_fast_iprestrict.apply_iprestrict:ignore_pathes",
+            group="test",
+            rate="1/1s",
+        )
+        self.assertEqual(r.request_limit, 1)
 
 
 class AsyncTests(TestCase):

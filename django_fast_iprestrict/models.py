@@ -122,7 +122,9 @@ class RuleManager(models.Manager):
     def match_ip(self, ip: str, rule_id=None, remote=True):
         ip_address_user = parse_ipaddress(ip)
         if rule_id:
-            item = self.ip_matchers_local()[rule_id]
+            item = self.ip_matchers_local().get(rule_id, None)
+            if not item:
+                return None, None
             for network in item[0]:
                 try:
                     if network == "*" or ip_address_user in network:
