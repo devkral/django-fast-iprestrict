@@ -113,7 +113,7 @@ class RuleManager(models.Manager):
                 ["*"]
                 if not obj.has_networks and not obj.has_sources
                 else obj.get_processed_networks(),
-                obj.action,
+                RULE_ACTION(obj.action),
                 # annotated
                 not obj.has_networks and not obj.has_sources,
             )
@@ -132,7 +132,7 @@ class RuleManager(models.Manager):
                 except TypeError:
                     pass
             if remote:
-                for network in RuleSource.objects.ip_matchers_remote(rule_id):
+                for network in RuleSource.objects.ip_matchers_remote([rule_id]):
                     try:
                         if ip_address_user in network:
                             return rule_id, item[1]
@@ -256,8 +256,8 @@ class Rule(models.Model):
             )
         ]
 
-    def match_ip(self, ip):
-        return type(self).objects.match_ip(ip, rule_id=self.id)
+    def match_ip(self, ip, remote=True):
+        return type(self).objects.match_ip(ip, rule_id=self.id, remote=remote)
 
 
 class RuleNetwork(models.Model):
@@ -297,24 +297,32 @@ class RuleSourceManager(models.Manager):
         keys = keys_query.values_list("cache_key", flat=True)
 
         # unordered dict
-        result = cache.get_many(keys)
-        for source in keys_query.exclude(id__in=result.keys()):
+        cache_result = cache.get_many(keys)
+        last_interval = None
+        to_set = {}
+        for source in keys_query.exclude(cache_key__in=cache_result.keys()).order_by(
+            "interval"
+        ):
             # FIXME: double calling, some kind of locking would be good
             networks = source.get_processed_networks_uncached()
             cache_key = source.get_cache_key()
-            result[cache_key] = networks
-            cache.set(
-                cache_key,
-                ",".join(map(lambda x: x.compressed, networks)),
-                source.interval,
-            )
+            cache_result[cache_key] = networks
+            if last_interval is not None and last_interval != source.interval:
+                cache.set_many(to_set, last_interval)
+                to_set = {}
+            to_set[cache_key] = ",".join(map(lambda x: x.compressed, networks))
+            last_interval = source.interval
+        if last_interval is not None:
+            cache.set_many(to_set, last_interval)
 
-        for key in result.keys():
-            value = result[key]
+        networks = []
+        for value in cache_result.values():
             if isinstance(value, str):
-                result[key] = [parse_ipnetwork(network) for network in value.split(",")]
+                value = [parse_ipnetwork(network) for network in value.split(",")]
 
-        return result
+            networks.extend(value)
+
+        return networks
 
 
 class RuleSource(models.Model):
@@ -382,7 +390,7 @@ class RulePathManager(models.Manager):
         candidates = Rule.objects.match_all_ip(ip, remote=remote, generic=True)
         _path_matchers = self.path_matchers()
         for rule_id, action in candidates:
-            if action == RULE_ACTION.disabled.value:
+            if action == RULE_ACTION.disabled:
                 continue
             matcher = _path_matchers.get(rule_id, None)
             # matcher is None, catchall for pathes (can be also a real catch all)

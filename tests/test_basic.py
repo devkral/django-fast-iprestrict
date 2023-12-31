@@ -3,7 +3,11 @@ from django.contrib.auth.models import User
 from django.test import RequestFactory, TestCase
 
 from django_fast_iprestrict.models import Rule
-from django_fast_iprestrict.utils import RULE_ACTION, LockoutException
+from django_fast_iprestrict.utils import (
+    RULE_ACTION,
+    LockoutException,
+    get_default_action,
+)
 
 admin_index_pages = [
     "/admin/django_fast_iprestrict/",
@@ -12,6 +16,10 @@ admin_index_pages = [
     "/admin/django_fast_iprestrict/rulesource/",
     "/admin/django_fast_iprestrict/rule/",
 ]
+
+
+def test_iprestrict_gen():
+    return ["::2", "127.0.0.2"]
 
 
 class SyncTests(TestCase):
@@ -64,6 +72,25 @@ class SyncTests(TestCase):
             for page in admin_index_pages:
                 response = self.client.get(page)
                 self.assertEqual(response.status_code, 200)
+
+    def test_sources(self):
+        rule = Rule.objects.create(name="test", action=RULE_ACTION.deny)
+        rule.sources.create(
+            generator_fn="tests.test_basic.test_iprestrict_gen", interval=5
+        )
+        self.assertEqual(
+            get_default_action(rule.match_ip(ip="127.0.0.1")[1]), RULE_ACTION.allow
+        )
+        self.assertEqual(
+            get_default_action(rule.match_ip(ip="127.0.0.2", remote=False)[1]),
+            RULE_ACTION.allow,
+        )
+        self.assertEqual(
+            get_default_action(rule.match_ip(ip="127.0.0.2")[1]), RULE_ACTION.deny
+        )
+        self.assertEqual(
+            get_default_action(rule.match_ip(ip="::2")[1]), RULE_ACTION.deny
+        )
 
     def test_ratelimit_plain(self):
         factory = RequestFactory()
