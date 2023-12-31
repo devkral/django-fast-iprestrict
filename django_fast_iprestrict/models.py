@@ -318,9 +318,13 @@ class RuleSourceManager(models.Manager):
         networks = []
         for value in cache_result.values():
             if isinstance(value, str):
-                value = [parse_ipnetwork(network) for network in value.split(",")]
-
-            networks.extend(value)
+                for network_str in value.split(","):
+                    try:
+                        networks.append(parse_ipnetwork(network_str))
+                    except ValueError:
+                        pass
+            else:
+                networks.extend(value)
 
         return networks
 
