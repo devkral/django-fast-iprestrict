@@ -78,6 +78,19 @@ def foo(request):
 
 ```
 
+### Sources (GEOIP)
+
+For GEOIP or other stuff sources can be used.
+
+Sources are functions ending with `iprestrict_gen` which are callable without argument.
+
+They are referenced in admin with their path, e.g.:
+
+`tests.test_basic.test_iprestrict_gen` (=also working example in dev environment)
+
+This means most probably you have to define your own generator function which returns a list of networks in string format
+(sry, security, otherwise an attacker could use the source feature to wreck the system or extract sensible informations).
+
 ## behaviour
 
 ### ipv4 ipv6
@@ -122,10 +135,6 @@ poetry run ./manage.py runserver
 Note:
 
 given the lack of tests and the early development state, it is possible that some parts have erratas.
-
-# GEOIP
-
-GEOIP can be done via sources (WIP)
 
 # TODO
 
