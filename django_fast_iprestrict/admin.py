@@ -12,7 +12,7 @@ from django.template.response import TemplateResponse
 from django.urls import path
 from django.utils.html import format_html
 
-from .models import Rule, RuleNetwork, RulePath, RuleSource
+from .models import Rule, RuleNetwork, RulePath, RuleRatelimit, RuleSource
 from .utils import RULE_ACTION, LockoutException, get_default_action, get_ip
 
 # Register your models here.
@@ -45,6 +45,10 @@ class ExtraOnlyOnInitialMixin:
 
 class RulePathInlineAdmin(ExtraOnlyOnInitialMixin, admin.StackedInline):
     model = RulePath
+
+
+class RuleRatelimitInlineAdmin(ExtraOnlyOnInitialMixin, admin.StackedInline):
+    model = RuleRatelimit
 
 
 class RuleNetworkInlineAdmin(ExtraOnlyOnInitialMixin, admin.TabularInline):
@@ -103,7 +107,12 @@ class RuleAdmin(admin.ModelAdmin):
     list_editable = ("name", "action")
     ordering = ("position",)
     fields = ["name", "action"]
-    inlines = [RuleNetworkInlineAdmin, RuleSourceInlineAdmin, RulePathInlineAdmin]
+    inlines = [
+        RuleNetworkInlineAdmin,
+        RuleSourceInlineAdmin,
+        RulePathInlineAdmin,
+        RuleRatelimitInlineAdmin,
+    ]
 
     @admin.display(description="")
     def position_short(self, obj):
