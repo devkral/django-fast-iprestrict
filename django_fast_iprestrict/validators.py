@@ -1,6 +1,7 @@
 import ipaddress
 import re
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MinLengthValidator
 
@@ -40,21 +41,40 @@ min_length_1 = MinLengthValidator(1)
 
 def validate_ratelimit_key(value):
     min_length_1(value)
+    splitted = value.split(".")
+    if not all(map(lambda x: x.isidentifier(), splitted)):
+        raise ValidationError("Invalid path.", code="invalid", params={"value": value})
+    if splitted[-1].startswith("_"):
+        raise ValidationError(
+            "not a safe ratelimit key.", code="insecure", params={"value": value}
+        )
+
+    for prefix in getattr(settings, "IPRESTRICT_ALLOWED_FN_PREFIXES", ()):
+        if value.startswith(prefix):
+            return
     if not value.isidentifier():
         raise ValidationError(
-            "not a safe ratelimit key.", code="invalid", params={"value": value}
+            "not a safe ratelimit key.", code="insecure", params={"value": value}
         )
 
 
 def validate_generator_fn(value):
     min_length_1(value)
     # TODO: expand security checks
-    if not all(map(lambda x: x.isidentifier(), value.split("."))):
+    splitted = value.split(".")
+    if not all(map(lambda x: x.isidentifier(), splitted)):
         raise ValidationError("Invalid path.", code="invalid", params={"value": value})
-    if not value.endswith("iprestrict_gen"):
+    if splitted[-1].startswith("_"):
         raise ValidationError(
-            "not a valid generator function.", code="invalid", params={"value": value}
+            "not a safe generate_fn.", code="insecure", params={"value": value}
         )
+
+    for prefix in getattr(settings, "IPRESTRICT_ALLOWED_FN_PREFIXES", ()):
+        if value.startswith(prefix):
+            return
+    raise ValidationError(
+        "not a safe generate_fn.", code="insecure", params={"value": value}
+    )
 
 
 _rate = re.compile(r"(\d+)/(\d+)?([smhdw])?")

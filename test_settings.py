@@ -71,3 +71,4 @@ DATABASES = {
 STATIC_URL = "/static/"
 
 IPRESTRICT_DEFAULT_ACTION = "allow"
+IPRESTRICT_ALLOWED_FN_PREFIXES = ["tests.test_basic.test_iprestrict_gen"]

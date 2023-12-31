@@ -82,14 +82,17 @@ def foo(request):
 
 For GEOIP or other stuff sources can be used.
 
-Sources are functions ending with `iprestrict_gen` which are callable without argument.
+Sources are functions with prefixes in IPRESTRICT_ALLOWED_FN_PREFIXES (can also be the whole function).
 
 They are referenced in admin with their path, e.g.:
 
-`tests.test_basic.test_iprestrict_gen` (=also working example in dev environment)
+`tests.test_basic.test_iprestrict_gen` (=also working example in dev environment with test_settings)
 
-This means most probably you have to define your own generator function which returns a list of networks in string format
-(sry, security, otherwise an attacker could use the source feature to wreck the system or extract sensible informations).
+### Ratelimits
+
+ratelimits require the companion library django-fast-ratelimit. And they work only with it! Otherwise crashes are preprogrammed
+
+Ratelimit keys are either the default builtin functions or functions with prefixes in IPRESTRICT_ALLOWED_FN_PREFIXES
 
 ## behaviour
 
@@ -111,6 +114,7 @@ This allows a path catch all with a path like:
 
 ## settings
 
+IPRESTRICT_ALLOWED_FN_PREFIXES: []
 IPRESTRICT_CACHE: select cache, defaults to "default" cache
 IPRESTRICT_KEY_PREFIX: cache key prefix, defaults to "fip:"
 IPRESTRICT_DEFAULT_ACTION: "allow"/"deny" : default action when no rule matches, default, when unset is "allow". "allow" or unset is strongly recommended except you want to set the rules programmatically
