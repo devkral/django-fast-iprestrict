@@ -27,7 +27,6 @@ ratelimit = [
 ]
 [tool.poetry.group.test.dependencies]
 tox = "*"
-django-fast-ratelimit = ">=5.0.0"
 
 [tool.poetry.group.dev.dependencies]
 tox = "*"
