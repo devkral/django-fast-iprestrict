@@ -41,16 +41,17 @@ min_length_1 = MinLengthValidator(1)
 
 def validate_ratelimit_key(value):
     min_length_1(value)
-    if value == "django_fast_iprestrict.apply_iprestrict":
+    splitted = value.split(":", 1)
+    if splitted[0] == "django_fast_iprestrict.apply_iprestrict":
         raise ValidationError(
             "ratelimit key would cause infinite recursion",
             code="insecure",
             params={"value": value},
         )
-    splitted = value.split(".")
-    if not all(map(lambda x: x.isidentifier(), splitted)):
+    path_parts = splitted[0].split(".")
+    if not all(map(lambda x: x.isidentifier(), path_parts)):
         raise ValidationError("Invalid path.", code="invalid", params={"value": value})
-    if splitted[-1].startswith("_"):
+    if path_parts[-1].startswith("_"):
         raise ValidationError(
             "not a safe ratelimit key.", code="insecure", params={"value": value}
         )
@@ -66,11 +67,11 @@ def validate_ratelimit_key(value):
 
 def validate_generator_fn(value):
     min_length_1(value)
-    # TODO: expand security checks
-    splitted = value.split(".")
-    if not all(map(lambda x: x.isidentifier(), splitted)):
+    splitted = value.split(":", 1)
+    path_parts = splitted[0].split(".")
+    if not all(map(lambda x: x.isidentifier(), path_parts)):
         raise ValidationError("Invalid path.", code="invalid", params={"value": value})
-    if splitted[-1].startswith("_"):
+    if path_parts[-1].startswith("_"):
         raise ValidationError(
             "not a safe generate_fn.", code="insecure", params={"value": value}
         )

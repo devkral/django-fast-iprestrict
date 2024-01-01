@@ -11,6 +11,10 @@ It is even possible to use django-fast-iprestrict in django-fast-ratelimit
 ## Installation
 
 ```sh
+pip install django-fast-iprestrict[ratelimit]
+
+# or the limited without ratelimit integration
+
 pip install django-fast-iprestrict
 
 ```
