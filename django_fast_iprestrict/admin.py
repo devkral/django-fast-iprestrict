@@ -13,7 +13,13 @@ from django.urls import path
 from django.utils.html import format_html
 
 from .models import Rule, RuleNetwork, RulePath, RuleRatelimit, RuleSource
-from .utils import RULE_ACTION, LockoutException, get_default_action, get_ip
+from .utils import RULE_ACTION, LockoutException, get_ip
+
+try:
+    import django_fast_ratelimit as ratelimit
+except ImportError:
+    ratelimit = None
+
 
 # Register your models here.
 
@@ -172,12 +178,22 @@ class RuleAdmin(admin.ModelAdmin):
         rule_id, action, is_catch_all, ratelimits = RulePath.objects.match_ip_and_path(
             get_ip(request), test_path
         )
-        if action:
-            if action == RULE_ACTION.deny.value:
-                raise PermissionDenied()
 
-        elif get_default_action() == RULE_ACTION.deny.value:
+        if ratelimit:
+            for rdict in ratelimits:
+                r = ratelimit.get_ratelimit(
+                    request=request,
+                    action=ratelimit.Action.PEEK,
+                    group=rdict["group"],
+                    key=rdict["key"],
+                    rate=rdict["rate"],
+                )
+                r.decorate_object(
+                    request, name=rdict["decorate_name"], block=rdict["block"]
+                )
+        if action == RULE_ACTION.deny:
             raise PermissionDenied()
+
         return HttpResponse(f"accessed: {test_path}")
 
     def test_rules(self, request):
