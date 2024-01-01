@@ -5,7 +5,7 @@ from django.utils.decorators import sync_and_async_middleware
 from .utils import RULE_ACTION, get_ip
 
 try:
-    import ratelimit
+    import django_fast_ratelimit as ratelimit
 except ImportError:
     ratelimit = None
 

@@ -278,7 +278,7 @@ class Rule(models.Model):
     def get_ratelimit_dicts(self):
         return list(
             self.ratelimits.filter(is_active=True).values(
-                "key", "group", "decorate_name", "block", "wait"
+                "key", "group", "rate", "decorate_name", "block", "wait"
             )
         )
 

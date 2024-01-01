@@ -5,7 +5,7 @@ from django.http import HttpRequest
 from .utils import RULE_ACTION, get_default_action, get_ip
 
 try:
-    import ratelimit
+    import django_fast_ratelimit as ratelimit
 except ImportError:
     ratelimit = None
 

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "django-fast-iprestrict"
-version = "0.5.0"
+version = "0.6.0"
 description = ""
 authors = ["alex <devkral@web.de>"]
 license = "MIT"
@@ -19,7 +19,7 @@ classifiers = [
 [tool.poetry.dependencies]
 python = ">=3.10,<4.0"
 django = ">=4.0"
-django-fast-ratelimit = {version = ">=4.1.1", optional=true }
+django-fast-ratelimit = {version = ">=5.0.0", optional=true }
 
 [tool.poetry.extras]
 ratelimit = [
@@ -27,12 +27,12 @@ ratelimit = [
 ]
 [tool.poetry.group.test.dependencies]
 tox = "*"
-django-fast-ratelimit = ">=4.1.1"
+django-fast-ratelimit = ">=5.0.0"
 
 [tool.poetry.group.dev.dependencies]
 tox = "*"
 faker = "*"
-django-fast-ratelimit = ">=4.1.1"
+django-fast-ratelimit = ">=5.0.0"
 
 [build-system]
 requires = ["poetry-core"]

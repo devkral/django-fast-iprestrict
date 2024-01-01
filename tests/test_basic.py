@@ -1,4 +1,4 @@
-import ratelimit
+import django_fast_ratelimit as ratelimit
 from django.contrib.auth.models import User
 from django.test import RequestFactory, TestCase
 
@@ -82,7 +82,7 @@ class SyncTests(TestCase):
         self.assertEqual(rule.match_ip(ip="127.0.0.2")[1], RULE_ACTION.deny)
         self.assertEqual(rule.match_ip(ip="::2")[1], RULE_ACTION.deny)
 
-    def test_ratelimit_plain(self):
+    def test_as_ratelimit_fn_plain(self):
         factory = RequestFactory()
         rule = Rule.objects.create(name="test", action=RULE_ACTION.deny)
         request = factory.get("/foobar/")
@@ -104,7 +104,7 @@ class SyncTests(TestCase):
         )
         self.assertGreaterEqual(r.request_limit, 0)
 
-    def test_ratelimit_pathes(self):
+    def test_as_ratelimit_fn_pathes(self):
         factory = RequestFactory()
         rule = Rule.objects.create(name="test", action=RULE_ACTION.deny)
         rule.pathes.create(path="/foobar/")
@@ -142,6 +142,23 @@ class SyncTests(TestCase):
             rate="1/1s",
         )
         self.assertEqual(r.request_limit, 1)
+
+    def test_ratelimit_middleware(self):
+        self.client.force_login(self.admin_user)
+        rule = Rule.objects.create(name="test", action=RULE_ACTION.only_ratelimit)
+        rule.pathes.create(path=".*", is_regex=True)
+        rule.ratelimits.create(
+            key="user",
+            rate="1/2m",
+            group="test_ratelimit_middleware",
+            block=True,
+            is_active=True,
+        )
+        response = self.client.get(admin_index_pages[0])
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(hasattr(response.wsgi_request, "ratelimit"))
+        response = self.client.get(admin_index_pages[0])
+        self.assertEqual(response.status_code, 403)
 
 
 class AsyncTests(TestCase):

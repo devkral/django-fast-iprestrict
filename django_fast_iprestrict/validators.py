@@ -41,6 +41,12 @@ min_length_1 = MinLengthValidator(1)
 
 def validate_ratelimit_key(value):
     min_length_1(value)
+    if value == "django_fast_iprestrict.apply_iprestrict":
+        raise ValidationError(
+            "ratelimit key would cause infinite recursion",
+            code="insecure",
+            params={"value": value},
+        )
     splitted = value.split(".")
     if not all(map(lambda x: x.isidentifier(), splitted)):
         raise ValidationError("Invalid path.", code="invalid", params={"value": value})

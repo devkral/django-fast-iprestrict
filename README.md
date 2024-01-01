@@ -63,7 +63,7 @@ The rule names can be used for the django-fast-ratelimit adapter:
 
 ```python
 
-import ratelimit
+import django_fast_ratelimit as ratelimit
 
 r = ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict", groups="rulename", rate="1/1s")
 
@@ -83,6 +83,8 @@ def foo(request):
 For GEOIP or other stuff sources can be used.
 
 Sources are functions with prefixes in IPRESTRICT_ALLOWED_FN_PREFIXES (can also be the whole function).
+
+Restriction: "\_" prefixed functions are not allowed
 
 They are referenced in admin with their path, e.g.:
 
