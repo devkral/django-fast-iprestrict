@@ -114,7 +114,7 @@ This allows a path catch all with a path like:
 
 ## settings
 
-IPRESTRICT_ALLOWED_FN_PREFIXES: defaults to ()
+IPRESTRICT_ALLOWED_FN_PREFIXES: defaults to [] (empty list)
 IPRESTRICT_CACHE: select cache, defaults to "default" cache
 IPRESTRICT_KEY_PREFIX: cache key prefix, defaults to "fip:"
 IPRESTRICT_DEFAULT_ACTION: "allow"/"deny" : default action when no rule matches, default, when unset is "allow". "allow" or unset is strongly recommended except you want to set the rules programmatically
