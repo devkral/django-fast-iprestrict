@@ -31,7 +31,7 @@ from .validators import (
 # Create your models here.
 
 _empty = ()
-_update_interval_nsecs = 2 * 60 * 1000
+_update_interval_secs = 2 * 60
 
 
 def get_default_position():
@@ -39,7 +39,7 @@ def get_default_position():
 
 
 class RuleManager(models.Manager):
-    _next_rules_updates = time.monotonic_ns() + _update_interval_nsecs
+    _next_rules_updates = time.monotonic() + _update_interval_secs
 
     def _atomic_update(self, ip=None, path=None, use_atomic=True):
         stack = ExitStack()
@@ -56,7 +56,7 @@ class RuleManager(models.Manager):
     def clear_local_caches(self):
         RulePath.objects.path_matchers.cache_clear()
         self._ip_matchers_local.cache_clear()
-        self._next_rules_updates = time.monotonic_ns() + _update_interval_nsecs
+        self._next_rules_updates = time.monotonic() + _update_interval_secs
 
     def lockout_check(self, ip, path=None, clear_caches_on_error=True, remote=False):
         if not ip:
@@ -129,7 +129,7 @@ class RuleManager(models.Manager):
         return patterns
 
     def ip_matchers_local(self, generic=False):
-        if self._next_rules_updates < time.monotonic_ns():
+        if self._next_rules_updates < time.monotonic():
             self.clear_local_caches()
         return self._ip_matchers_local(generic=generic)
 
