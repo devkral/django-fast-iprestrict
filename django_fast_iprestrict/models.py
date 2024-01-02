@@ -1,4 +1,5 @@
 import re
+import time
 from contextlib import ExitStack
 from functools import lru_cache
 
@@ -30,6 +31,7 @@ from .validators import (
 # Create your models here.
 
 _empty = ()
+_update_interval_nsecs = 2 * 60 * 1000
 
 
 def get_default_position():
@@ -37,6 +39,8 @@ def get_default_position():
 
 
 class RuleManager(models.Manager):
+    _next_rules_updates = time.monotonic_ns() + _update_interval_nsecs
+
     def _atomic_update(self, ip=None, path=None, use_atomic=True):
         stack = ExitStack()
         stack.queryset = self.all().select_for_update()
@@ -51,7 +55,8 @@ class RuleManager(models.Manager):
 
     def clear_local_caches(self):
         RulePath.objects.path_matchers.cache_clear()
-        self.ip_matchers_local.cache_clear()
+        self._ip_matchers_local.cache_clear()
+        self._next_rules_updates = time.monotonic_ns() + _update_interval_nsecs
 
     def lockout_check(self, ip, path=None, clear_caches_on_error=True, remote=False):
         if not ip:
@@ -90,7 +95,7 @@ class RuleManager(models.Manager):
             pass
 
     @lru_cache(maxsize=2)
-    def ip_matchers_local(self, generic=False):
+    def _ip_matchers_local(self, generic=False):
         # ordered dict
         patterns = {}
         queryset = self.annotate(
@@ -122,6 +127,11 @@ class RuleManager(models.Manager):
                 obj.get_ratelimit_dicts(),
             )
         return patterns
+
+    def ip_matchers_local(self, generic=False):
+        if self._next_rules_updates < time.monotonic_ns():
+            self.clear_local_caches()
+        return self._ip_matchers_local(generic=generic)
 
     def match_ip(self, ip: str, rule_id=None, remote=True):
         ip_address_user = parse_ipaddress(ip)
@@ -313,6 +323,9 @@ class RuleNetwork(models.Model):
     network = models.CharField(max_length=50, validators=[validate_network])
     is_active = models.BooleanField(blank=True, default=True)
 
+    def __str__(self):
+        return self.network
+
 
 class RuleSourceManager(models.Manager):
     def clear_remote_caches(self):
@@ -377,6 +390,9 @@ class RuleSourceManager(models.Manager):
                     except ValueError:
                         pass
         return result
+
+    def __str__(self):
+        return self.generator_fn
 
 
 class RuleSource(models.Model):

@@ -83,18 +83,17 @@ bcrypt = ["bcrypt"]
 
 [[package]]
 name = "django-fast-ratelimit"
-version = "5.0.1"
+version = "6.0.0"
 description = "Fast ratelimit implementation with django caches"
 optional = false
 python-versions = ">=3.9,<4.0"
 files = [
-    {file = "django_fast_ratelimit-5.0.1-py3-none-any.whl", hash = "sha256:04b56e2d5302bff59f568cb0beae5e9a636dac87498132467350d1dc2de836a2"},
-    {file = "django_fast_ratelimit-5.0.1.tar.gz", hash = "sha256:62c94eae8afa6dcb837388ec67cf9e60685667c12cf289754f1cb63d091ef3ea"},
+    {file = "django_fast_ratelimit-6.0.0-py3-none-any.whl", hash = "sha256:50079b76c7d1373c8fd438930ab71b4a310c69aae7ccb9be6b6094707776e89d"},
+    {file = "django_fast_ratelimit-6.0.0.tar.gz", hash = "sha256:cea98c4b6e0dfbe1fde53cf11f3d0281adf372e16059a13fa782155d1b47f5f1"},
 ]
 
 [package.dependencies]
 django = ">=3.0"
-django-fast-iprestrict = ">=0.4"
 
 [[package]]
 name = "faker"
@@ -313,4 +312,4 @@ ratelimit = ["django-fast-ratelimit"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<4.0"
-content-hash = "1646d2877bed5686c465c479e9acaac194700073e0bcefaa6220b56fd89be074"
+content-hash = "8dc19ed9bd54444b1ab76732a3f5f2354b3672b47735ecb181f2bb6a81cb3e6c"

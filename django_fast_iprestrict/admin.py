@@ -13,7 +13,7 @@ from django.urls import path
 from django.utils.html import format_html
 
 from .models import Rule, RuleNetwork, RulePath, RuleRatelimit, RuleSource
-from .utils import RULE_ACTION, LockoutException, get_ip
+from .utils import RULE_ACTION, LockoutException, get_ip, parse_ipaddress
 
 try:
     import django_fast_ratelimit as ratelimit
@@ -208,14 +208,14 @@ class RuleAdmin(admin.ModelAdmin):
             rule_id = RulePath.objects.match_ip_and_path(test_ip, test_path)[0]
             self.message_user(
                 request,
-                f"Parameters: ip: {test_ip}, path: {test_path}",
+                f"Parameters: ip: {test_ip} (parsed: {parse_ipaddress(test_ip)}), path: {test_path}",
                 level=INFO,
             )
         else:
             rule_id = Rule.objects.match_ip(test_ip)[0]
             self.message_user(
                 request,
-                f"Parameters: ip: {test_ip}",
+                f"Parameters: ip: {test_ip} (parsed: {parse_ipaddress(test_ip)})",
                 level=INFO,
             )
         if rule_id:
