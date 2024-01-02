@@ -8,7 +8,7 @@ from django.core.validators import MinLengthValidator
 
 def validate_network(value):
     try:
-        ip_addr = ipaddress.ip_address(value, strict=False)
+        ip_addr = ipaddress.ip_address(value)
         if getattr(ip_addr, "ipv4_mapped", None):
             raise ValidationError(
                 "Mapped ip4 addresses are forbidden. Use ip4 address instead.",
