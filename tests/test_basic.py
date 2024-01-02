@@ -103,6 +103,14 @@ class SyncTests(TestCase):
             rate="1/1s",
         )
         self.assertGreaterEqual(r.request_limit, 0)
+        request = factory.get("/foobar/")
+        r = ratelimit.get_ratelimit(
+            request=request,
+            key="django_fast_iprestrict.apply_iprestrict:require_rule",
+            group="test2",
+            rate="1/1s",
+        )
+        self.assertGreaterEqual(r.request_limit, 1)
 
     def test_as_ratelimit_fn_pathes(self):
         factory = RequestFactory()
@@ -142,6 +150,14 @@ class SyncTests(TestCase):
             rate="1/1s",
         )
         self.assertEqual(r.request_limit, 1)
+        request = factory.get("/foobar/")
+        r = ratelimit.get_ratelimit(
+            request=request,
+            key="django_fast_iprestrict.apply_iprestrict:require_rule,ignore_pathes",
+            group="test2",
+            rate="1/1s",
+        )
+        self.assertGreaterEqual(r.request_limit, 1)
 
     def test_ratelimit_middleware(self):
         self.client.force_login(self.admin_user)

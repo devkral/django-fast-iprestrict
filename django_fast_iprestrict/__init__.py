@@ -1,3 +1,5 @@
+__all__ = ["apply_iprestrict"]
+
 from functools import partial, singledispatch
 
 from django.http import HttpRequest
@@ -11,11 +13,15 @@ except ImportError:
 
 
 @singledispatch
-def apply_iprestrict(request: HttpRequest, group, ignore_pathes=False):
+def apply_iprestrict(
+    request: HttpRequest, group, ignore_pathes=False, require_rule=False
+):
     from .models import Rule, RulePath
 
     rule = Rule.objects.filter(name=group).first()
     if not rule:
+        if require_rule:
+            return 1
         return int(get_default_action() == RULE_ACTION.deny)
     with_path = False
     ip = get_ip(request)
@@ -48,4 +54,9 @@ def apply_iprestrict(request: HttpRequest, group, ignore_pathes=False):
 
 @apply_iprestrict.register
 def _(arg: str = ""):
-    return partial(apply_iprestrict, ignore_pathes=arg == "ignore_pathes")
+    args = arg.split(",")
+    return partial(
+        apply_iprestrict,
+        ignore_pathes="ignore_pathes" in args,
+        require_rule="require_rule" in args,
+    )
