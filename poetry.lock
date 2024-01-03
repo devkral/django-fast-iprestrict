@@ -63,17 +63,17 @@ files = [
 
 [[package]]
 name = "django"
-version = "5.0"
+version = "5.0.1"
 description = "A high-level Python web framework that encourages rapid development and clean, pragmatic design."
 optional = false
 python-versions = ">=3.10"
 files = [
-    {file = "Django-5.0-py3-none-any.whl", hash = "sha256:3a9fd52b8dbeae335ddf4a9dfa6c6a0853a1122f1fb071a8d5eca979f73a05c8"},
-    {file = "Django-5.0.tar.gz", hash = "sha256:7d29e14dfbc19cb6a95a4bd669edbde11f5d4c6a71fdaa42c2d40b6846e807f7"},
+    {file = "Django-5.0.1-py3-none-any.whl", hash = "sha256:f47a37a90b9bbe2c8ec360235192c7fddfdc832206fcf618bb849b39256affc1"},
+    {file = "Django-5.0.1.tar.gz", hash = "sha256:8c8659665bc6e3a44fefe1ab0a291e5a3fb3979f9a8230be29de975e57e8f854"},
 ]
 
 [package.dependencies]
-asgiref = ">=3.7.0"
+asgiref = ">=3.7.0,<4"
 sqlparse = ">=0.3.1"
 tzdata = {version = "*", markers = "sys_platform == \"win32\""}
 
@@ -83,13 +83,13 @@ bcrypt = ["bcrypt"]
 
 [[package]]
 name = "django-fast-ratelimit"
-version = "6.0.0"
+version = "6.2.0"
 description = "Fast ratelimit implementation with django caches"
 optional = false
 python-versions = ">=3.9,<4.0"
 files = [
-    {file = "django_fast_ratelimit-6.0.0-py3-none-any.whl", hash = "sha256:50079b76c7d1373c8fd438930ab71b4a310c69aae7ccb9be6b6094707776e89d"},
-    {file = "django_fast_ratelimit-6.0.0.tar.gz", hash = "sha256:cea98c4b6e0dfbe1fde53cf11f3d0281adf372e16059a13fa782155d1b47f5f1"},
+    {file = "django_fast_ratelimit-6.2.0-py3-none-any.whl", hash = "sha256:ffffae881bf35197556fd9e0928bea39a7364be886faf2376b51179195d03ebc"},
+    {file = "django_fast_ratelimit-6.2.0.tar.gz", hash = "sha256:f30c03180ed59b23e5b643abb5f3f3cc557922b1d2a0fbf80f03cbd7f8acf0c1"},
 ]
 
 [package.dependencies]

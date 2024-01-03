@@ -161,7 +161,12 @@ class SyncTests(TestCase):
 
     def test_ratelimit_middleware(self):
         self.client.force_login(self.admin_user)
-        rule = Rule.objects.create(name="test", action=RULE_ACTION.only_ratelimit)
+        rule = Rule.objects.create(
+            name="test",
+            action=RULE_ACTION.only_ratelimit,
+            invert_methods=True,
+            methods="",
+        )
         rule.pathes.create(path=".*", is_regex=True)
         rule.ratelimits.create(
             key="user",
@@ -174,6 +179,7 @@ class SyncTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(hasattr(response.wsgi_request, "ratelimit"))
         response = self.client.get(admin_index_pages[0])
+        self.assertTrue(hasattr(response.wsgi_request, "ratelimit"))
         self.assertEqual(response.status_code, 403)
 
 

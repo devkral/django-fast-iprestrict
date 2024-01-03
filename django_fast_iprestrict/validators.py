@@ -36,6 +36,11 @@ def validate_regex(value):
         raise ValidationError("Invalid regex.", code="invalid", params={"value": value})
 
 
+def validate_path(value):
+    # FIXME
+    pass
+
+
 min_length_1 = MinLengthValidator(1)
 
 
@@ -91,3 +96,10 @@ def validate_rate(value):
     matched = _rate.match(value)
     if not matched:
         raise ValidationError("Invalid rate", code="invalid", params={"value": value})
+
+
+def validate_methods(value):
+    if not all(map(lambda x: x.strip().isalpha(), value.split(","))):
+        raise ValidationError(
+            "Invalid methods", code="invalid", params={"value": value}
+        )

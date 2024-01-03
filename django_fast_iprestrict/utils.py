@@ -19,6 +19,13 @@ class RULE_ACTION(models.TextChoices):
     only_ratelimit = ("d", "only apply ratelimit")
 
 
+class RATELIMIT_ACTION(models.IntegerChoices):
+    INCREASE = (2, "normal")
+    PEEK = (1, "annotate only")
+    RESET = (3, "clear cache for key")
+    RESET_EPOCH = (4, "reset to before request")
+
+
 def get_default_interval():
     return 24 * 60 * 60
 

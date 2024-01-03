@@ -183,6 +183,7 @@ class RuleAdmin(admin.ModelAdmin):
             for rdict in ratelimits:
                 r = ratelimit.get_ratelimit(
                     request=request,
+                    # don't use action
                     action=ratelimit.Action.PEEK,
                     group=rdict["group"],
                     key=rdict["key"],
@@ -199,23 +200,27 @@ class RuleAdmin(admin.ModelAdmin):
     def test_rules(self, request):
         from django.contrib.messages import ERROR, INFO, SUCCESS, WARNING
 
+        test_method = request.POST.get("test_method", None) or None
+
         test_ip = request.POST.get("test_ip", None)
         if not test_ip:
             test_ip = get_ip(request)
 
         test_path = request.POST.get("test_path", None) or ""
         if test_path:
-            rule_id = RulePath.objects.match_ip_and_path(test_ip, test_path)[0]
+            rule_id = RulePath.objects.match_ip_and_path(
+                ip=test_ip, path=test_path, method=test_method
+            )[0]
             self.message_user(
                 request,
-                f"Parameters: ip: {test_ip} (parsed: {parse_ipaddress(test_ip)}), path: {test_path}",
+                f"Parameters: ip: {parse_ipaddress(test_ip)}, path: {test_path}, method: {test_method or '-'}",
                 level=INFO,
             )
         else:
-            rule_id = Rule.objects.match_ip(test_ip)[0]
+            rule_id = Rule.objects.match_ip(ip=test_ip, method=test_method)[0]
             self.message_user(
                 request,
-                f"Parameters: ip: {test_ip} (parsed: {parse_ipaddress(test_ip)})",
+                f"Parameters: ip: {parse_ipaddress(test_ip)}, method: {test_method or '-'}",
                 level=INFO,
             )
         if rule_id:

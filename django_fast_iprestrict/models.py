@@ -2,6 +2,7 @@ import re
 import time
 from contextlib import ExitStack
 from functools import lru_cache
+from typing import Optional
 
 from django.conf import settings
 from django.core.cache import caches
@@ -13,16 +14,20 @@ from django.db.transaction import atomic
 from django.utils.module_loading import import_string
 
 from .utils import (
+    RATELIMIT_ACTION,
     RULE_ACTION,
     LockoutException,
     get_default_action,
     get_default_interval,
+    invertedset,
     parse_ipaddress,
     parse_ipnetwork,
 )
 from .validators import (
     validate_generator_fn,
+    validate_methods,
     validate_network,
+    validate_path,
     validate_rate,
     validate_ratelimit_key,
     validate_regex,
@@ -63,8 +68,8 @@ class RuleManager(models.Manager):
             return
         if path:
             if (
-                RulePath.objects.match_ip_and_path(ip, path, remote=remote)[1]
-                == RULE_ACTION.deny.value
+                RulePath.objects.match_ip_and_path(ip=ip, path=path, remote=remote)[1]
+                == RULE_ACTION.deny
             ):
                 # otherwise the caches could cause access errors until server restart
                 if clear_caches_on_error:
@@ -72,7 +77,7 @@ class RuleManager(models.Manager):
                 raise LockoutException("would lock current user out")
 
         else:
-            if self.match_ip(ip, remote=remote)[1] == RULE_ACTION.deny.value:
+            if self.match_ip(ip=ip, remote=remote)[1] == RULE_ACTION.deny:
                 # otherwise the caches could cause access errors until server restart
                 if clear_caches_on_error:
                     self.clear_local_caches()
@@ -118,13 +123,11 @@ class RuleManager(models.Manager):
             ).exclude(action=RULE_ACTION.disabled.value)
         for obj in queryset.distinct():
             patterns[obj.id] = (
-                ["*"]
-                if not obj.has_networks and not obj.has_sources
-                else obj.get_processed_networks(),
-                RULE_ACTION(obj.action),
-                # annotated
-                not obj.has_networks and not obj.has_sources,
-                obj.get_ratelimit_dicts(),
+                ["*"] if obj._is_catchall() else obj.get_processed_networks(),  # 0
+                obj.get_methods(),  # 1
+                RULE_ACTION(obj.action),  # 2
+                obj._is_catchall(),  # 3
+                obj.get_ratelimit_dicts(),  # 4
             )
         return patterns
 
@@ -133,16 +136,21 @@ class RuleManager(models.Manager):
             self.clear_local_caches()
         return self._ip_matchers_local(generic=generic)
 
-    def match_ip(self, ip: str, rule_id=None, remote=True):
+    def match_ip(
+        self, ip: str, method: Optional[str] = None, rule_id=None, remote=True
+    ):
         ip_address_user = parse_ipaddress(ip)
         if rule_id:
             item = self.ip_matchers_local().get(rule_id, None)
             if not item:
                 return None, get_default_action(), False, _empty
+            if method and method not in item[1]:
+                return None, get_default_action(), False, _empty
+
             for network in item[0]:
                 try:
                     if network == "*" or ip_address_user in network:
-                        return rule_id, *item[1:]
+                        return rule_id, *item[2:]
                 except TypeError:
                     pass
             if remote:
@@ -153,7 +161,7 @@ class RuleManager(models.Manager):
                     for network in remote_networks:
                         try:
                             if ip_address_user in network:
-                                return rule_id, *item[1:]
+                                return rule_id, *item[2:]
                         except TypeError:
                             pass
 
@@ -165,45 +173,56 @@ class RuleManager(models.Manager):
                 else {}
             )
             for rule_id, item in ip_matchers.items():
+                if method and method not in item[1]:
+                    continue
                 for network in item[0]:
                     try:
                         if network == "*" or ip_address_user in network:
-                            return rule_id, *item[1:]
+                            return rule_id, *item[2:]
                     except TypeError:
                         pass
 
                 for network in ip_matchers_remote.get(str(rule_id), _empty):
                     try:
                         if ip_address_user in network:
-                            return rule_id, *item[1:]
+                            return rule_id, *item[2:]
                     except TypeError:
                         pass
         return None, get_default_action(), False, _empty
 
-    def match_all_ip(self, ip: str, remote=True, generic=False):
+    def match_all_ip(
+        self, ip: str, method: Optional[str] = None, remote=True, generic=False
+    ):
         # note: cannot apply ratelimit here
         ip_address_user = parse_ipaddress(ip)
         result = []
         ip_matchers = self.ip_matchers_local(generic=generic)
-        ip_matchers_remote = (
-            RuleSource.objects.ip_matchers_remote(ip_matchers.keys()) if remote else {}
-        )
+        ip_matchers_remote = None
         for rule_id, item in ip_matchers.items():
+            if method and method not in item[1]:
+                continue
             found_local_network = False
             for network in item[0]:
                 try:
                     if network == "*" or ip_address_user in network:
-                        result.append((rule_id, *item[1:]))
+                        result.append((rule_id, *item[2:]))
                         found_local_network = True
                         break
                 except TypeError:
                     pass
             if found_local_network:
                 continue
+            # lazy fetch
+            if ip_matchers_remote is None:
+                ip_matchers_remote = (
+                    RuleSource.objects.ip_matchers_remote(ip_matchers.keys())
+                    if remote
+                    else {}
+                )
             for network in ip_matchers_remote.get(str(rule_id), _empty):
                 try:
                     if ip_address_user in network:
-                        result.append((rule_id, *item[1:]))
+                        result.append((rule_id, *item[2:]))
                         break
                 except TypeError:
                     pass
@@ -258,6 +277,18 @@ class Rule(models.Model):
     _trigger_cleanup = True
     position = models.PositiveIntegerField(blank=True, default=get_default_position)
     name = models.CharField(max_length=50, unique=True)
+    methods = models.CharField(
+        max_length=100,
+        validators=[validate_methods],
+        default="",
+        blank=True,
+        help_text="comma seperated http methods",
+    )
+    invert_methods = models.BooleanField(
+        default=True,
+        blank=True,
+        help_text="exclude instead of include http methods. Set and leave methods empty to match all",
+    )
     action = models.CharField(
         max_length=1, choices=RULE_ACTION.choices, default=RULE_ACTION.disabled
     )
@@ -274,8 +305,12 @@ class Rule(models.Model):
         return self.name
 
     def is_catch_all(self, also_disabled=False):
-        rule = type(self).objects.ip_matchers_local(also_disabled).get(self.id)
-        return bool(rule and rule[2])
+        rule = type(self).objects.ip_matchers_local(generic=also_disabled).get(self.id)
+        return bool(rule and rule[3])
+
+    def _is_catchall(self):
+        # use annotations
+        return not self.has_networks and not self.has_sources
 
     def get_processed_networks(self):
         return [
@@ -288,12 +323,29 @@ class Rule(models.Model):
     def get_ratelimit_dicts(self):
         return list(
             self.ratelimits.filter(is_active=True).values(
-                "key", "group", "rate", "decorate_name", "block", "wait"
+                "key", "group", "rate", "decorate_name", "block", "wait", "action"
             )
         )
 
-    def match_ip(self, ip, remote=True):
-        return type(self).objects.match_ip(ip, rule_id=self.id, remote=remote)
+    def get_methods(self):
+        if self.invert_methods:
+            if not self.methods:
+                return invertedset()
+            return invertedset(self.methods.split(","))
+        if not self.methods:
+            return set()
+        return set(self.methods.split(","))
+
+    def match_ip(self, ip, method=None, remote=True):
+        return type(self).objects.match_ip(
+            ip, method=method, rule_id=self.id, remote=remote
+        )
+
+    def clean(self):
+        super().clean()
+        self.methods = ",".join(
+            sorted(map(lambda x: x.upper().strip(), self.methods.split(",")))
+        )
 
 
 class RuleRatelimitManager(models.Manager):
@@ -310,6 +362,10 @@ class RuleRatelimit(models.Model):
     )
     group = models.CharField(max_length=50)
     decorate_name = models.CharField(max_length=50, default="ratelimit", blank=True)
+    action = models.SmallIntegerField(
+        choices=RATELIMIT_ACTION.choices,
+        default=RATELIMIT_ACTION.INCREASE,
+    )
     rate = models.CharField(max_length=10, validators=[validate_rate])
     block = models.BooleanField(blank=True, default=False)
     wait = models.BooleanField(blank=True, default=False)
@@ -450,10 +506,14 @@ class RulePathManager(models.Manager):
             patterns[key] = re.compile("|".join(patterns[key]))
         return patterns
 
-    def match_ip_and_path(self, ip: str, path: str, remote=True):
+    def match_ip_and_path(
+        self, ip: str, path: str, method: Optional[str] = None, remote=True
+    ):
         # ordered
         # with generic = pathless, non-catchall and disabled candidates are included
-        candidates = Rule.objects.match_all_ip(ip, remote=remote, generic=True)
+        candidates = Rule.objects.match_all_ip(
+            ip, method=method, remote=remote, generic=True
+        )
         _path_matchers = self.path_matchers()
         ratelimits = []
         for rule_id, action, is_catch_all, _ratelimits in candidates:
@@ -488,16 +548,10 @@ class RulePath(models.Model):
 
     def clean_fields(self, exclude=None):
         super().clean_fields(exclude=exclude)
-        if self.is_regex:
-            try:
-                validate_regex(self.path)
-            except ValidationError as exc:
-                if exclude and "path" in exclude:
-                    raise exc
-                else:
-                    raise ValidationError({"path": exc})
-                if exclude and "path" in exclude:
-                    raise exc
-                else:
-                    raise ValidationError({"path": exc})
-                    raise ValidationError({"path": exc})
+        try:
+            validate_regex(self.path) if self.is_regex else validate_path(self.path)
+        except ValidationError as exc:
+            if exclude and "path" in exclude:
+                raise exc
+            else:
+                raise ValidationError({"path": exc})
