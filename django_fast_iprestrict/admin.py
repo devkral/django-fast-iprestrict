@@ -108,11 +108,18 @@ _position_template = """
 
 @admin.register(Rule)
 class RuleAdmin(admin.ModelAdmin):
-    list_display = ("position_short", "position_buttons", "action", "name")
+    list_display = (
+        "position_short",
+        "position_buttons",
+        "action",
+        "name",
+        "methods",
+        "invert_methods",
+    )
     list_display_links = ("position_short",)
-    list_editable = ("name", "action")
+    list_editable = ("name", "action", "methods", "invert_methods")
     ordering = ("position",)
-    fields = ["name", "action"]
+    fields = ["name", "action", "methods", "invert_methods"]
     inlines = [
         RuleNetworkInlineAdmin,
         RuleSourceInlineAdmin,
