@@ -14,7 +14,11 @@ except ImportError:
 if ratelimit:
 
     def _apply_iprestrict(
-        request: HttpRequest, group, ignore_pathes=False, require_rule=False
+        request: HttpRequest,
+        group,
+        action=None,
+        ignore_pathes=False,
+        require_rule=False,
     ):
         # don't check methods here as the check is done in ratelimit
         from .models import Rule, RulePath
