@@ -75,8 +75,11 @@ r = ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict", group
 
 r = ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict:ignore_pathes", groups="rulename", rate="1/1s")
 
-# or as decorator
-@ratelimit(key="django_fast_iprestrict.apply_iprestrict", groups="rulename", rate="1/1s")
+# or when only checking ips and not pathes (when pathes are available) and requiring rule
+r = ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict:ignore_pathes,require_rule", groups="rulename", rate="1/1s")
+
+# or as decorator with rule requirement
+@ratelimit(key="django_fast_iprestrict.apply_iprestrict:require_rule", groups="rulename", rate="1/1s")
 def foo(request):
     return ""
 

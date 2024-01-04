@@ -83,6 +83,8 @@ class SyncTests(TestCase):
         self.assertEqual(rule.match_ip(ip="::2")[1], RULE_ACTION.deny)
 
     def test_as_ratelimit_fn_plain(self):
+        rule_unrelated = Rule.objects.create(name="unrelated", action=RULE_ACTION.deny)
+        rule_unrelated.pathes.create(path=".*", is_regex=True)
         factory = RequestFactory()
         rule = Rule.objects.create(name="test", action=RULE_ACTION.deny)
         request = factory.get("/foobar/")
@@ -113,6 +115,8 @@ class SyncTests(TestCase):
         self.assertGreaterEqual(r.request_limit, 1)
 
     def test_as_ratelimit_fn_pathes(self):
+        rule_unrelated = Rule.objects.create(name="unrelated", action=RULE_ACTION.deny)
+        rule_unrelated.pathes.create(path=".*", is_regex=True)
         factory = RequestFactory()
         rule = Rule.objects.create(name="test", action=RULE_ACTION.deny)
         rule.pathes.create(path="/foobar/")

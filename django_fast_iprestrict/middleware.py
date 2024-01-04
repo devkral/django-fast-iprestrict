@@ -1,4 +1,4 @@
-from asgiref.sync import iscoroutinefunction, sync_to_async
+from asgiref.sync import iscoroutinefunction
 from django.core.exceptions import PermissionDenied
 from django.utils.decorators import sync_and_async_middleware
 
@@ -16,11 +16,10 @@ def fast_iprestrict(get_response):
 
     # One-time configuration and initialization goes here.
     if iscoroutinefunction(get_response):
-        amatch_ip_and_path = sync_to_async(RulePath.objects.match_ip_and_path)
 
         async def middleware(request):
             action, _, ratelimits = (
-                await amatch_ip_and_path(get_ip(request), request.path)
+                await RulePath.objects.amatch_ip_and_path(get_ip(request), request.path)
             )[1:]
             if ratelimit:
                 for rdict in ratelimits:

@@ -4,6 +4,7 @@ from contextlib import ExitStack
 from functools import lru_cache
 from typing import Optional
 
+from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.core.cache import caches
 from django.core.exceptions import ValidationError
@@ -136,12 +137,19 @@ class RuleManager(models.Manager):
             self.clear_local_caches()
         return self._ip_matchers_local(generic=generic)
 
+    aip_matchers_local = sync_to_async(ip_matchers_local)
+
     def match_ip(
-        self, ip: str, method: Optional[str] = None, rule_id=None, remote=True
+        self,
+        ip: str,
+        method: Optional[str] = None,
+        rule_id=None,
+        generic=False,
+        remote=True,
     ):
         ip_address_user = parse_ipaddress(ip)
         if rule_id:
-            item = self.ip_matchers_local().get(rule_id, None)
+            item = self.ip_matchers_local(generic=generic).get(rule_id, None)
             if not item:
                 return None, get_default_action(), False, _empty
             if method and method not in item[1]:
@@ -166,7 +174,7 @@ class RuleManager(models.Manager):
                             pass
 
         else:
-            ip_matchers = self.ip_matchers_local()
+            ip_matchers = self.ip_matchers_local(generic=generic)
             ip_matchers_remote = (
                 RuleSource.objects.ip_matchers_remote(ip_matchers.keys())
                 if remote
@@ -189,6 +197,8 @@ class RuleManager(models.Manager):
                     except TypeError:
                         pass
         return None, get_default_action(), False, _empty
+
+    aip_match_ip = sync_to_async(match_ip)
 
     def match_all_ip(
         self, ip: str, method: Optional[str] = None, remote=True, generic=False
@@ -228,6 +238,8 @@ class RuleManager(models.Manager):
                     pass
 
         return result
+
+    amatch_all_ip = sync_to_async(match_all_ip)
 
     def position_start(self, rule_id, ip=None, path=None):
         with self._atomic_update(ip=ip, path=path) as stack:
@@ -336,10 +348,12 @@ class Rule(models.Model):
             return set()
         return set(self.methods.split(","))
 
-    def match_ip(self, ip, method=None, remote=True):
+    def match_ip(self, ip, method=None, remote=True, generic=False):
         return type(self).objects.match_ip(
-            ip, method=method, rule_id=self.id, remote=remote
+            ip, method=method, rule_id=self.id, remote=remote, generic=generic
         )
+
+    amatch_ip = sync_to_async(match_ip)
 
     def clean(self):
         super().clean()
@@ -506,27 +520,43 @@ class RulePathManager(models.Manager):
             patterns[key] = re.compile("|".join(patterns[key]))
         return patterns
 
+    apath_matchers = sync_to_async(path_matchers)
+
     def match_ip_and_path(
-        self, ip: str, path: str, method: Optional[str] = None, remote=True
+        self,
+        ip: str,
+        path: str,
+        method: Optional[str] = None,
+        rule_id=None,
+        remote=True,
     ):
         # ordered
         # with generic = pathless, non-catchall and disabled candidates are included
-        candidates = Rule.objects.match_all_ip(
-            ip, method=method, remote=remote, generic=True
-        )
+        if rule_id:
+            candidate = Rule.objects.match_ip(
+                ip, rule_id=rule_id, method=method, remote=remote, generic=True
+            )
+            if candidate[0] is not None:
+                candidates = [candidate]
+        else:
+            candidates = Rule.objects.match_all_ip(
+                ip, method=method, remote=remote, generic=True
+            )
         _path_matchers = self.path_matchers()
         ratelimits = []
-        for rule_id, action, is_catch_all, _ratelimits in candidates:
+        for _rule_id, action, is_catch_all, _ratelimits in candidates:
             if action == RULE_ACTION.disabled:
                 continue
-            matcher = _path_matchers.get(rule_id, None)
+            matcher = _path_matchers.get(_rule_id, None)
             # matcher is None, catchall for pathes (can be also a real catch all)
             if matcher and matcher.match(path):
                 ratelimits.extend(_ratelimits)
                 if action == RULE_ACTION.only_ratelimit:
                     continue
-                return rule_id, action, is_catch_all, ratelimits
+                return _rule_id, action, is_catch_all, ratelimits
         return None, get_default_action(), False, ratelimits
+
+    amatch_ip_and_path = sync_to_async(match_ip_and_path)
 
 
 class RulePath(models.Model):
