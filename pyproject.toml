@@ -25,11 +25,14 @@ django-fast-ratelimit = {version = ">=5.0.0", optional=true }
 ratelimit = [
     "django-fast-ratelimit",
 ]
+# installed by default
 [tool.poetry.group.test.dependencies]
 tox = "*"
+# for conversion
+coverage = "*"
 
+# installed by default
 [tool.poetry.group.dev.dependencies]
-tox = "*"
 faker = "*"
 django-fast-ratelimit = ">=5.0.0"
 
