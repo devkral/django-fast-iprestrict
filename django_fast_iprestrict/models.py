@@ -1,3 +1,4 @@
+import logging
 import re
 import time
 from contextlib import ExitStack
@@ -34,6 +35,7 @@ from .validators import (
     validate_regex,
 )
 
+logger = logging.getLogger(__name__)
 # Create your models here.
 
 _empty = ()
@@ -398,10 +400,12 @@ class RuleNetwork(models.Model):
 
 
 class RuleSourceManager(models.Manager):
-    def clear_remote_caches(self):
+    def clear_remote_caches(
+        self,
+    ):
         cache = caches[getattr(settings, "IPRESTRICT_CACHE", "default")]
         cache.delete_many(
-            self.annotate_with_cache_key().values_list("cache_key", flat=True)
+            self.annotate_with_cache_key().values_list("cache_key", flat=True),
         )
 
     def annotate_with_cache_key(self, queryset=None):
@@ -418,7 +422,28 @@ class RuleSourceManager(models.Manager):
                 models.F("rule_id"),
                 output_field=models.TextField(),
             ),
+            force_expire_cache_key=Concat(
+                models.Value(
+                    f'{getattr(settings, "IPRESTRICT_KEY_PREFIX", "fip:")}source_force_expire:'
+                ),
+                models.F("interval"),
+                models.Value(":"),
+                models.F("rule_id"),
+                output_field=models.TextField(),
+            ),
         )
+
+    def _is_force_expired(self, query, cache, force_expire_multiplier):
+        # <= 0 disables force expire
+        if force_expire_multiplier <= 0:
+            return False
+        keys = set(query.values_list("force_expire_cache_key", flat=True))
+        expire_dates = cache.get_many(keys)
+        cur_time = int(time.time())
+        for key in keys:
+            if key not in expire_dates or expire_dates[key] < cur_time:
+                return True
+        return False
 
     def ip_matchers_remote(self, rules):
         cache = caches[getattr(settings, "IPRESTRICT_CACHE", "default")]
@@ -429,31 +454,24 @@ class RuleSourceManager(models.Manager):
             q &= models.Q(rule_id__in=rules)
         keys_query = self.annotate_with_cache_key(self.filter(q))
         keys = keys_query.values_list("cache_key", flat=True)
-        force_expire_interval = None
         max_interval = keys_query.aggregate(Max("interval", default=0))["interval__max"]
         force_expire_multiplier = int(
             getattr(settings, "IPRESTRICT_SOURCE_FORCE_EXPIRE_MULTIPLIER", 1)
         )
-        # max_interval 0 implies no caching
-        if force_expire_multiplier > 0 and max_interval > 0:
-            force_expire_key = f'{getattr(settings, "IPRESTRICT_KEY_PREFIX", "fip:")}source_force_expire'
-
-            force_expire = cache.get(force_expire_key)
-            if not force_expire or force_expire < int(time.time()):
-                force_expire_interval = max_interval * force_expire_multiplier
-
-        # unordered dict
+        skip_cache = max_interval == 0 or self._is_force_expired(
+            keys_query, cache, force_expire_multiplier
+        )
         cache_result = (
-            cache.get_many(keys)
-            if force_expire_interval is None and max_interval > 0
-            else {}
+            cache.get_many(keys) if max_interval > 0 and not skip_cache else {}
         )
         last_interval = None
         to_set = {}
         result = {}
 
-        for source in keys_query.exclude(cache_key__in=cache_result.keys()).order_by(
-            "interval"
+        for source in (
+            keys_query.exclude(cache_key__in=cache_result.keys())
+            .distinct()
+            .order_by("interval")
         ):
             # FIXME: double calling, some kind of locking would be good
             networks = source.get_processed_networks_uncached()
@@ -467,6 +485,11 @@ class RuleSourceManager(models.Manager):
             # interval 0 disables caching
             if source.interval > 0:
                 to_set[cache_key] = ",".join(map(lambda x: x.compressed, networks))
+                if force_expire_multiplier >= 1:
+                    to_set[source.force_expire_cache_key] = (
+                        int(time.time()) + force_expire_multiplier * source.interval
+                    )
+
             last_interval = source.interval
         if last_interval is not None:
             # not empty
@@ -482,14 +505,6 @@ class RuleSourceManager(models.Manager):
                         networks.append(parse_ipnetwork(network_str))
                     except ValueError:
                         pass
-        if force_expire_interval is not None:
-            # sources can be slow, so recalculate time here
-            cache.set(
-                force_expire_key,
-                int(time.time()) + force_expire_interval,
-                timeout=force_expire_interval,
-            )
-
         return result
 
     def __str__(self):
@@ -513,6 +528,9 @@ class RuleSource(models.Model):
         # last is rule id for easy extraction
         return f'{getattr(settings, "IPRESTRICT_KEY_PREFIX", "fip:")}source_data:{self.id}:{self.rule_id}'
 
+    def get_force_expire_cache_key(self):
+        return f'{getattr(settings, "IPRESTRICT_KEY_PREFIX", "fip:")}source_force_expire:{self.interval}:{self.rule_id}'
+
     def get_processed_networks_uncached(self):
         ret = []
         success = False
@@ -524,12 +542,24 @@ class RuleSource(models.Model):
         if success:
             try:
                 ip_nets = import_string(self.generator_fn)()
-            except ImportError:
-                # FIXME: proper reporting
-                return
-            except Exception:
-                # FIXME: proper reporting
-                return
+            except ImportError as exc:
+                logger.warning(
+                    'could not import source generator_fn: "%s", rule name %s, source id %s',
+                    self.generator_fn,
+                    self.rule.name,
+                    self.id,
+                    exc_info=exc,
+                )
+                return []
+            except Exception as exc:
+                logger.error(
+                    'source generator_fn "%s" failed, rule name %s, source id %s',
+                    self.generator_fn,
+                    self.rule.name,
+                    self.id,
+                    exc_info=exc,
+                )
+                return []
             for network in ip_nets:
                 try:
                     ret.append(parse_ipnetwork(network))

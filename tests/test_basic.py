@@ -1,8 +1,11 @@
+import time
+from unittest.mock import patch
+
 import django_fast_ratelimit as ratelimit
 from django.contrib.auth.models import User
 from django.test import RequestFactory, TestCase, override_settings
 
-from django_fast_iprestrict.models import Rule
+from django_fast_iprestrict.models import Rule, RuleSource
 from django_fast_iprestrict.utils import RULE_ACTION, LockoutException
 
 admin_index_pages = [
@@ -15,6 +18,14 @@ admin_index_pages = [
 
 
 def test_iprestrict_gen():
+    return ["::2", "127.0.0.2"]
+
+
+def test_iprestrict_2gen():
+    raise
+
+
+def test_notallowed_iprestrict_gen():
     return ["::2", "127.0.0.2"]
 
 
@@ -69,39 +80,69 @@ class SyncTests(TestCase):
                 response = self.client.get(page)
                 self.assertEqual(response.status_code, 200)
 
-    def test_sources(self):
+    @patch("tests.test_basic.test_iprestrict_gen", side_effect=test_iprestrict_gen)
+    def test_sources(self, generator):
         rule = Rule.objects.create(name="test", action=RULE_ACTION.deny)
         rule.sources.create(
-            generator_fn="tests.test_basic.test_iprestrict_gen", interval=5
+            generator_fn="tests.test_basic.test_iprestrict_gen", interval=3
         )
-        self.assertEqual(rule.match_ip(ip="127.0.0.1")[1], RULE_ACTION.allow)
+        RuleSource.objects.clear_remote_caches()
+        self.assertEqual(generator.call_count, 0)
         self.assertEqual(
             rule.match_ip(ip="127.0.0.2", remote=False)[1],
             RULE_ACTION.allow,
         )
+        self.assertEqual(generator.call_count, 0)
+        self.assertEqual(rule.match_ip(ip="127.0.0.1")[1], RULE_ACTION.allow)
+        self.assertEqual(generator.call_count, 1)
         self.assertEqual(rule.match_ip(ip="127.0.0.2")[1], RULE_ACTION.deny)
+        self.assertEqual(generator.call_count, 1)
         self.assertEqual(rule.match_ip(ip="::2")[1], RULE_ACTION.deny)
+        self.assertEqual(generator.call_count, 1)
+        time.sleep(3)
+        self.assertEqual(rule.match_ip(ip="::2")[1], RULE_ACTION.deny)
+        self.assertEqual(generator.call_count, 2)
 
     test_sources_no_force_expire = override_settings(
         IPRESTRICT_SOURCE_FORCE_EXPIRE_MULTIPLIER=0
     )(test_sources)
 
-    def test_sources2(self):
+    @patch("tests.test_basic.test_iprestrict_gen", side_effect=test_iprestrict_gen)
+    def test_sources2(self, generator):
         rule = Rule.objects.create(name="test", action=RULE_ACTION.deny)
         rule.sources.create(
             generator_fn="tests.test_basic.test_iprestrict_gen", interval=0
         )
-        self.assertEqual(rule.match_ip(ip="127.0.0.1")[1], RULE_ACTION.allow)
+        RuleSource.objects.clear_remote_caches()
+        self.assertEqual(generator.call_count, 0)
         self.assertEqual(
             rule.match_ip(ip="127.0.0.2", remote=False)[1],
             RULE_ACTION.allow,
         )
+        self.assertEqual(generator.call_count, 0)
+        self.assertEqual(rule.match_ip(ip="127.0.0.1")[1], RULE_ACTION.allow)
+        self.assertEqual(generator.call_count, 1)
         self.assertEqual(rule.match_ip(ip="127.0.0.2")[1], RULE_ACTION.deny)
+        self.assertEqual(generator.call_count, 2)
         self.assertEqual(rule.match_ip(ip="::2")[1], RULE_ACTION.deny)
+        self.assertEqual(generator.call_count, 3)
 
     test_sources2_no_force_expire = override_settings(
         IPRESTRICT_SOURCE_FORCE_EXPIRE_MULTIPLIER=0
     )(test_sources2)
+
+    def test_invalid_sources(self):
+        rule = Rule.objects.create(name="test", action=RULE_ACTION.deny)
+        rule.sources.create(generator_fn="tests.test_basic.non_existing", interval=0)
+        rule.sources.create(
+            generator_fn="tests.test_basic.test_iprestrict_2gen", interval=0
+        )
+        rule.sources.create(
+            generator_fn="tests.test_basic.test_notallowed_iprestrict_gen", interval=0
+        )
+        RuleSource.objects.clear_remote_caches()
+        with self.assertLogs():
+            RuleSource.objects.ip_matchers_remote([rule])
 
     def test_as_ratelimit_fn_plain(self):
         rule_unrelated = Rule.objects.create(name="unrelated", action=RULE_ACTION.deny)
