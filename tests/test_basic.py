@@ -1,6 +1,6 @@
 import django_fast_ratelimit as ratelimit
 from django.contrib.auth.models import User
-from django.test import RequestFactory, TestCase
+from django.test import RequestFactory, TestCase, override_settings
 
 from django_fast_iprestrict.models import Rule
 from django_fast_iprestrict.utils import RULE_ACTION, LockoutException
@@ -81,6 +81,27 @@ class SyncTests(TestCase):
         )
         self.assertEqual(rule.match_ip(ip="127.0.0.2")[1], RULE_ACTION.deny)
         self.assertEqual(rule.match_ip(ip="::2")[1], RULE_ACTION.deny)
+
+    test_sources_no_force_expire = override_settings(
+        IPRESTRICT_SOURCE_FORCE_EXPIRE_MULTIPLIER=0
+    )(test_sources)
+
+    def test_sources2(self):
+        rule = Rule.objects.create(name="test", action=RULE_ACTION.deny)
+        rule.sources.create(
+            generator_fn="tests.test_basic.test_iprestrict_gen", interval=0
+        )
+        self.assertEqual(rule.match_ip(ip="127.0.0.1")[1], RULE_ACTION.allow)
+        self.assertEqual(
+            rule.match_ip(ip="127.0.0.2", remote=False)[1],
+            RULE_ACTION.allow,
+        )
+        self.assertEqual(rule.match_ip(ip="127.0.0.2")[1], RULE_ACTION.deny)
+        self.assertEqual(rule.match_ip(ip="::2")[1], RULE_ACTION.deny)
+
+    test_sources2_no_force_expire = override_settings(
+        IPRESTRICT_SOURCE_FORCE_EXPIRE_MULTIPLIER=0
+    )(test_sources2)
 
     def test_as_ratelimit_fn_plain(self):
         rule_unrelated = Rule.objects.create(name="unrelated", action=RULE_ACTION.deny)
