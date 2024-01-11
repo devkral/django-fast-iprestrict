@@ -38,11 +38,7 @@ MIDDLEWARE = [
     "django_fast_iprestrict.middleware.fast_iprestrict",
     ...
 ]
-
-
 ```
-
-Note: pip >= 19 is required
 
 ## usage
 
@@ -137,6 +133,9 @@ The ratelimit settings are fallbacks, so the settings must only be set on one pl
 
 Note: when using ratelimit the ratelimit settings are used for ratelimits, they can differ when not using the fallback
 
+Note: when setting IPRESTRICT_SOURCE_FORCE_EXPIRE_MULTIPLIER to <= 0 and use sources make sure you clear the cache at project restart. E.g. in Docker start file or restart the cache server too
+Otherwise old entries doesn't expire and can cause stale sources (hard to detect)
+
 ## development
 
 a development environment can be setup this way (poetry is recommended):
@@ -148,12 +147,6 @@ poetry run ./manage.py runserver
 
 ```
 
-Note:
-
-given the lack of tests and the early development state, it is possible that some parts have erratas.
-
 # TODO
 
 -   localization?
--   remote fetch sources and cache them. Use get_many set_many to retrieve them
--   docs for new settings
