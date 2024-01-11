@@ -6,7 +6,7 @@ from ...models import Rule
 
 
 class Command(BaseCommand):
-    help = "Emergency disable all ratelimits and clear caches for reallowing login"
+    help = "Emergency disable all rules and clear caches for reallowing login"
 
     def handle(self, **kwargs):
         Rule.objects.filter(action=RULE_ACTION.deny.value).update(
