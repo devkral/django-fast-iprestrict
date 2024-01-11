@@ -1,8 +1,8 @@
 from django.core.cache import caches
 from django.core.management.base import BaseCommand
 
-from ...misc import RULE_ACTION
 from ...models import Rule
+from ...utils import RULE_ACTION
 
 
 class Command(BaseCommand):
