@@ -1,6 +1,8 @@
 from posixpath import dirname
 
+from django.conf import settings
 from django.contrib import admin
+from django.core.cache import caches
 from django.core.exceptions import PermissionDenied
 from django.http import (
     HttpRequest,
@@ -141,6 +143,7 @@ class RuleAdmin(admin.ModelAdmin):
     def get_urls(self):
         return [
             path("test_rules/", self.test_rules),
+            path("clear_caches/", self.clear_iprestrict_caches),
             path(
                 "simulate_rules<path:test_path>",
                 self.simulate_rules,
@@ -240,6 +243,15 @@ class RuleAdmin(admin.ModelAdmin):
         else:
             self.message_user(request, "No rule matched", level=ERROR)
 
+        return HttpResponseRedirect("../")
+
+    def clear_iprestrict_caches(self, request):
+        for cache_name in {
+            getattr(settings, "IPRESTRICT_CACHE", "default"),
+            getattr(settings, "RATELIMIT_CACHE", "default"),
+        }:
+            caches[cache_name].clear()
+        # closed later
         return HttpResponseRedirect("../")
 
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):

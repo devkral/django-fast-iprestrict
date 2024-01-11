@@ -25,12 +25,13 @@
                     (leave empty to don't use method testing)
                 </label>
             </div>
-            <button type="submit">Test rules</button>
+            <div style="display: flex; gap: 4px; margin-top: 8px;">
+                <button type="submit">Test rules</button>
+                <button type="submit" formaction="../rule/clear_caches/">Clear caches</button>
+                <a href="../rule/simulate_rules/">simulate rules</a>
+
+            </div>
         </form>
-    </div>
-    <br />
-    <div>
-        <a href="../rule/simulate_rules/">simulate rules</a>
     </div>
     <br />
     {{ block.super }}

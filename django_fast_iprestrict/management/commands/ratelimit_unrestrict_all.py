@@ -1,3 +1,4 @@
+from django.core.cache import caches
 from django.core.management.base import BaseCommand
 
 from ...misc import RULE_ACTION
@@ -11,4 +12,8 @@ class Command(BaseCommand):
         Rule.objects.filter(action=RULE_ACTION.deny.value).update(
             action=RULE_ACTION.disabled.value
         )
-        # clearing local_caches doesn't help, different proccess
+        for cache in caches.all():
+            cache.clear()
+            cache.close()
+
+        # clearing local_caches doesn't help, use different proccess

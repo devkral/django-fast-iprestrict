@@ -433,17 +433,21 @@ class RuleSourceManager(models.Manager):
             ),
         )
 
-    def _is_force_expired(self, query, cache, force_expire_multiplier):
-        # <= 0 disables force expire
-        if force_expire_multiplier <= 0:
-            return False
-        keys = set(query.values_list("force_expire_cache_key", flat=True))
-        expire_dates = cache.get_many(keys)
+    def _is_force_expired(self, query, cache, set_all):
+        if set_all:
+            return set(query.values_list("cache_key", flat=True))
+        expire_dates = cache.get_many(
+            set(query.values_list("force_expire_cache_key", flat=True))
+        )
         cur_time = int(time.time())
-        for key in keys:
-            if key not in expire_dates or expire_dates[key] < cur_time:
-                return True
-        return False
+        expired = set()
+        for source in query:
+            if (
+                source.force_expire_cache_key not in expire_dates
+                or expire_dates[source.force_expire_cache_key] < cur_time
+            ):
+                expired.add(source.cache_key)
+        return expired
 
     def ip_matchers_remote(self, rules):
         cache = caches[getattr(settings, "IPRESTRICT_CACHE", "default")]
@@ -456,13 +460,18 @@ class RuleSourceManager(models.Manager):
         keys = keys_query.values_list("cache_key", flat=True)
         max_interval = keys_query.aggregate(Max("interval", default=0))["interval__max"]
         force_expire_multiplier = int(
-            getattr(settings, "IPRESTRICT_SOURCE_FORCE_EXPIRE_MULTIPLIER", 1)
+            getattr(settings, "IPRESTRICT_SOURCE_FORCE_EXPIRE_MULTIPLIER", 3)
         )
-        skip_cache = max_interval == 0 or self._is_force_expired(
-            keys_query, cache, force_expire_multiplier
+        # <= force_expire_multiplier <= 0 disables force expire
+        skip_cache = (
+            set()
+            if force_expire_multiplier <= 0
+            else self._is_force_expired(keys_query, cache, max_interval == 0)
         )
         cache_result = (
-            cache.get_many(keys) if max_interval > 0 and not skip_cache else {}
+            cache.get_many(set(keys).difference(skip_cache))
+            if max_interval > 0 and not skip_cache
+            else {}
         )
         last_interval = None
         to_set = {}
@@ -475,7 +484,9 @@ class RuleSourceManager(models.Manager):
         ):
             # FIXME: double calling, some kind of locking would be good
             networks = source.get_processed_networks_uncached()
-            cache_key = source.get_cache_key()
+            # annotated
+            cache_key = source.cache_key
+            force_expire_cache_key = source.force_expire_cache_key
             result.setdefault(cache_key.rsplit(":", 1)[-1], []).extend(networks)
             if last_interval is not None and last_interval != source.interval:
                 # not empty
@@ -486,7 +497,7 @@ class RuleSourceManager(models.Manager):
             if source.interval > 0:
                 to_set[cache_key] = ",".join(map(lambda x: x.compressed, networks))
                 if force_expire_multiplier >= 1:
-                    to_set[source.force_expire_cache_key] = (
+                    to_set[force_expire_cache_key] = (
                         int(time.time()) + force_expire_multiplier * source.interval
                     )
 
