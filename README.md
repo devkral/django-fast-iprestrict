@@ -126,6 +126,7 @@ This allows a path catch all with a path like:
 IPRESTRICT_ALLOWED_FN_PREFIXES: defaults to [] (empty list)
 IPRESTRICT_CACHE: select cache, defaults to "default" cache
 IPRESTRICT_KEY_PREFIX: cache key prefix, defaults to "fip:"
+IPRESTRICT_SOURCE_FORCE_EXPIRE_MULTIPLIER: force expire sources after multiplier \* max source interval, for dangling caches, set to 0 or lower to disable force expire, defaults to 1
 IPRESTRICT_DEFAULT_ACTION: "allow"/"deny" : default action when no rule matches, default, when unset is "allow". "allow" or unset is strongly recommended except you want to set the rules programmatically
 IPRESTRICT_TRUSTED_PROXIES: set list of trusted proxies
 RATELIMIT_TRUSTED_PROXIES: fallback when IPRESTRICT_TRUSTED_PROXIES is unset

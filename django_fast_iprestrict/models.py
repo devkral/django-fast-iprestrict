@@ -417,7 +417,7 @@ class RuleSourceManager(models.Manager):
                 models.Value(":"),
                 models.F("rule_id"),
                 output_field=models.TextField(),
-            )
+            ),
         )
 
     def ip_matchers_remote(self, rules):
@@ -429,12 +429,29 @@ class RuleSourceManager(models.Manager):
             q &= models.Q(rule_id__in=rules)
         keys_query = self.annotate_with_cache_key(self.filter(q))
         keys = keys_query.values_list("cache_key", flat=True)
+        force_expire_interval = None
+        max_interval = keys_query.aggregate(Max("interval", default=0))["interval__max"]
+        force_expire_multiplier = int(
+            getattr(settings, "IPRESTRICT_SOURCE_FORCE_EXPIRE_MULTIPLIER", 1)
+        )
+        # max_interval 0 implies no caching
+        if force_expire_multiplier > 0 and max_interval > 0:
+            force_expire_key = f'{getattr(settings, "IPRESTRICT_KEY_PREFIX", "fip:")}source_force_expire'
+
+            force_expire = cache.get(force_expire_key)
+            if not force_expire or force_expire < int(time.time()):
+                force_expire_interval = max_interval * force_expire_multiplier
 
         # unordered dict
-        cache_result = cache.get_many(keys)
+        cache_result = (
+            cache.get_many(keys)
+            if force_expire_interval is None and max_interval > 0
+            else {}
+        )
         last_interval = None
         to_set = {}
         result = {}
+
         for source in keys_query.exclude(cache_key__in=cache_result.keys()).order_by(
             "interval"
         ):
@@ -443,12 +460,18 @@ class RuleSourceManager(models.Manager):
             cache_key = source.get_cache_key()
             result.setdefault(cache_key.rsplit(":", 1)[-1], []).extend(networks)
             if last_interval is not None and last_interval != source.interval:
-                cache.set_many(to_set, last_interval)
+                # not empty
+                if to_set:
+                    cache.set_many(to_set, timeout=last_interval)
                 to_set = {}
-            to_set[cache_key] = ",".join(map(lambda x: x.compressed, networks))
+            # interval 0 disables caching
+            if source.interval > 0:
+                to_set[cache_key] = ",".join(map(lambda x: x.compressed, networks))
             last_interval = source.interval
         if last_interval is not None:
-            cache.set_many(to_set, last_interval)
+            # not empty
+            if to_set:
+                cache.set_many(to_set, timeout=last_interval)
 
         for cache_key, value in cache_result.items():
             if isinstance(value, str):
@@ -459,6 +482,14 @@ class RuleSourceManager(models.Manager):
                         networks.append(parse_ipnetwork(network_str))
                     except ValueError:
                         pass
+        if force_expire_interval is not None:
+            # sources can be slow, so recalculate time here
+            cache.set(
+                force_expire_key,
+                int(time.time()) + force_expire_interval,
+                timeout=force_expire_interval,
+            )
+
         return result
 
     def __str__(self):
