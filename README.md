@@ -136,6 +136,12 @@ Note: when using ratelimit the ratelimit settings are used for ratelimits, they 
 Note: when setting IPRESTRICT_SOURCE_FORCE_EXPIRE_MULTIPLIER to <= 0 and use sources make sure you clear the cache at project restart. E.g. in Docker start file or restart the cache server too
 Otherwise old entries doesn't expire and can cause stale sources (hard to detect)
 
+## commands
+
+iprestrict_clear_caches: clear caches in use by iprestrict and ratelimit, kills other entries in the cache too
+
+iprestrict_unrestrict_all: disable all rules, clear caches in use by iprestrict and ratelimit, kills other entries in the cache too (should only be used in emergencies)
+
 ## development
 
 a development environment can be setup this way (poetry is recommended):
