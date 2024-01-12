@@ -1,13 +1,13 @@
 [tool.poetry]
 name = "django-fast-iprestrict"
-version = "0.10.1"
+version = "0.11.0"
 description = ""
 authors = ["alex <devkral@web.de>"]
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/devkral/django-fast-iprestrict"
 classifiers = [
-  "Development Status :: 4 - Beta",
+  "Development Status :: 5 - Production/Stable",
   "Environment :: Web Environment",
   "Framework :: Django",
   "License :: OSI Approved :: MIT License",

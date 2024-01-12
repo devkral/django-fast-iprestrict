@@ -122,7 +122,7 @@ This allows a path catch all with a path like:
 IPRESTRICT_ALLOWED_FN_PREFIXES: defaults to [] (empty list)
 IPRESTRICT_CACHE: select cache, defaults to "default" cache
 IPRESTRICT_KEY_PREFIX: cache key prefix, defaults to "fip:"
-IPRESTRICT_SOURCE_FORCE_EXPIRE_MULTIPLIER: force expire sources after multiplier \* interval, for dangling caches; set to 0 or lower to disable force expire, defaults to 3
+IPRESTRICT_SOURCE_FORCE_EXPIRE: force expire sources via extra cache entry, for dangling caches; defaults to True
 IPRESTRICT_DEFAULT_ACTION: "allow"/"deny" : default action when no rule matches, default, when unset is "allow". "allow" or unset is strongly recommended except you want to set the rules programmatically
 IPRESTRICT_TRUSTED_PROXIES: set list of trusted proxies
 RATELIMIT_TRUSTED_PROXIES: fallback when IPRESTRICT_TRUSTED_PROXIES is unset
@@ -133,8 +133,8 @@ The ratelimit settings are fallbacks, so the settings must only be set on one pl
 
 Note: when using ratelimit the ratelimit settings are used for ratelimits, they can differ when not using the fallback
 
-Note: when setting IPRESTRICT_SOURCE_FORCE_EXPIRE_MULTIPLIER to <= 0 and use sources make sure you clear the cache at project restart. E.g. in Docker start file or restart the cache server too
-Otherwise old entries doesn't expire and can cause stale sources (hard to detect)
+Note: when disabling the setting IPRESTRICT_SOURCE_FORCE_EXPIRE and using sources make sure you clear the cache at project restart. E.g. in Docker start file or restart the cache server too
+Otherwise old entries sometimes doesn't expire and can cause stale sources (hard to detect)
 
 ## commands
 

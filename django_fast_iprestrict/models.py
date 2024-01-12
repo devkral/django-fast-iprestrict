@@ -459,13 +459,11 @@ class RuleSourceManager(models.Manager):
         keys_query = self.annotate_with_cache_key(self.filter(q))
         keys = keys_query.values_list("cache_key", flat=True)
         max_interval = keys_query.aggregate(Max("interval", default=0))["interval__max"]
-        force_expire_multiplier = int(
-            getattr(settings, "IPRESTRICT_SOURCE_FORCE_EXPIRE_MULTIPLIER", 3)
-        )
+        force_expire = bool(getattr(settings, "IPRESTRICT_SOURCE_FORCE_EXPIRE", True))
         # <= force_expire_multiplier <= 0 disables force expire
         skip_cache = (
             set()
-            if force_expire_multiplier <= 0
+            if not force_expire
             else self._is_force_expired(keys_query, cache, max_interval == 0)
         )
         cache_result = (
@@ -496,10 +494,8 @@ class RuleSourceManager(models.Manager):
             # interval 0 disables caching
             if source.interval > 0:
                 to_set[cache_key] = ",".join(map(lambda x: x.compressed, networks))
-                if force_expire_multiplier >= 1:
-                    to_set[force_expire_cache_key] = (
-                        int(time.time()) + force_expire_multiplier * source.interval
-                    )
+                if force_expire:
+                    to_set[force_expire_cache_key] = int(time.time()) + source.interval
 
             last_interval = source.interval
         if last_interval is not None:

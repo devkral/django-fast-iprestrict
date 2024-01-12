@@ -104,7 +104,7 @@ class SyncTests(TestCase):
         self.assertEqual(generator.call_count, 2)
 
     test_sources_no_force_expire = override_settings(
-        IPRESTRICT_SOURCE_FORCE_EXPIRE_MULTIPLIER=0
+        IPRESTRICT_SOURCE_FORCE_EXPIRE=False
     )(test_sources)
 
     @patch("tests.test_basic.test_iprestrict_gen", side_effect=test_iprestrict_gen)
@@ -128,7 +128,7 @@ class SyncTests(TestCase):
         self.assertEqual(generator.call_count, 3)
 
     test_sources2_no_force_expire = override_settings(
-        IPRESTRICT_SOURCE_FORCE_EXPIRE_MULTIPLIER=0
+        IPRESTRICT_SOURCE_FORCE_EXPIRE=False
     )(test_sources2)
 
     def test_invalid_sources(self):
