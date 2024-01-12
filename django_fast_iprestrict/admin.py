@@ -14,6 +14,7 @@ from django.template.response import TemplateResponse
 from django.urls import path
 from django.utils.html import format_html
 
+from .forms import LinkBackForm, TestRulesForm
 from .models import Rule, RuleNetwork, RulePath, RuleRatelimit, RuleSource
 from .utils import RULE_ACTION, LockoutException, get_ip, parse_ipaddress
 
@@ -26,7 +27,26 @@ except ImportError:
 # Register your models here.
 
 
-class RuleSubMixin:
+class TestRulesMixin:
+    def changelist_view(self, request, extra_context=None):
+        default = {
+            "test_rules_form": TestRulesForm(
+                data={
+                    **request.session.get("iprestrict_test_rules_data", {}),
+                    "test_rules_form-link_back": request.path,
+                },
+                prefix="test_rules_form",
+            )
+        }
+        if extra_context:
+            default.update(extra_context)
+        return super().changelist_view(
+            request,
+            extra_context=default,
+        )
+
+
+class RuleSubMixin(TestRulesMixin):
     def get_urls(self):
         return [
             path("<str:object_id>/change/", self.redirect_change),
@@ -109,7 +129,7 @@ _position_template = """
 
 
 @admin.register(Rule)
-class RuleAdmin(admin.ModelAdmin):
+class RuleAdmin(TestRulesMixin, admin.ModelAdmin):
     list_display = (
         "position_short",
         "position_buttons",
@@ -153,6 +173,8 @@ class RuleAdmin(admin.ModelAdmin):
         ]
 
     def rule_move(self, request: HttpRequest, object_id):
+        if request.method != "POST":
+            return HttpResponseRedirect("../")
         direction = request.POST["rule_move_direction"]
         parent_path = dirname(request.path.rstrip("/"))
         try:
@@ -210,49 +232,71 @@ class RuleAdmin(admin.ModelAdmin):
     def test_rules(self, request):
         from django.contrib.messages import ERROR, INFO, SUCCESS, WARNING
 
-        test_method = request.POST.get("test_method", None) or None
+        if request.method != "POST":
+            return HttpResponseRedirect("../")
+        form = TestRulesForm(
+            request.POST,
+            prefix="test_rules_form",
+        )
+        if form.is_valid():
+            test_method = request.POST.get("test_method", None) or None
 
-        test_ip = request.POST.get("test_ip", None)
-        if not test_ip:
-            test_ip = get_ip(request)
+            test_ip = form.cleaned_data.get("test_ip", None)
+            if not test_ip:
+                test_ip = get_ip(request)
 
-        test_path = request.POST.get("test_path", None) or ""
-        if test_path:
-            rule_id = RulePath.objects.match_ip_and_path(
-                ip=test_ip, path=test_path, method=test_method
-            )[0]
-            self.message_user(
-                request,
-                f"Parameters: ip: {parse_ipaddress(test_ip)}, path: {test_path}, method: {test_method or '-'}",
-                level=INFO,
-            )
-        else:
-            rule_id = Rule.objects.match_ip(ip=test_ip, method=test_method)[0]
-            self.message_user(
-                request,
-                f"Parameters: ip: {parse_ipaddress(test_ip)}, method: {test_method or '-'}",
-                level=INFO,
-            )
-        if rule_id:
-            rule = Rule.objects.get(id=rule_id)
-            self.message_user(
-                request,
-                f"Matched rule: {rule.name}, action: {RULE_ACTION(rule.action).label}",
-                level=SUCCESS if rule.action == RULE_ACTION.allow.value else WARNING,
-            )
-        else:
-            self.message_user(request, "No rule matched", level=ERROR)
+            test_path = form.cleaned_data.get("test_path", None) or ""
+            if test_path:
+                rule_id = RulePath.objects.match_ip_and_path(
+                    ip=test_ip, path=test_path, method=test_method
+                )[0]
+                self.message_user(
+                    request,
+                    f"Parameters: ip: {parse_ipaddress(test_ip)}, path: {test_path}, method: {test_method or '-'}",
+                    level=INFO,
+                )
+            else:
+                rule_id = Rule.objects.match_ip(ip=test_ip, method=test_method)[0]
+                self.message_user(
+                    request,
+                    f"Parameters: ip: {parse_ipaddress(test_ip)}, method: {test_method or '-'}",
+                    level=INFO,
+                )
+            if rule_id:
+                rule = Rule.objects.get(id=rule_id)
+                self.message_user(
+                    request,
+                    f"Matched rule: {rule.name}, action: {RULE_ACTION(rule.action).label}",
+                    level=SUCCESS
+                    if rule.action == RULE_ACTION.allow.value
+                    else WARNING,
+                )
+            else:
+                self.message_user(request, "No rule matched", level=ERROR)
 
-        return HttpResponseRedirect("../")
+        session_data = {}
+
+        for key in form.fields:
+            prefixed_key = f"test_rules_form-{key}"
+            if key != "link_back" and prefixed_key in form.data:
+                session_data[prefixed_key] = form.data[prefixed_key]
+        request.session["iprestrict_test_rules_data"] = session_data
+        return HttpResponseRedirect(form.cleaned_data.get("link_back", "../"))
 
     def clear_iprestrict_caches(self, request):
-        for cache_name in {
-            getattr(settings, "IPRESTRICT_CACHE", "default"),
-            getattr(settings, "RATELIMIT_CACHE", "default"),
-        }:
-            caches[cache_name].clear()
-        # closed later
-        return HttpResponseRedirect("../")
+        if request.method != "POST":
+            raise HttpResponseBadRequest("invalid method")
+        form = LinkBackForm(
+            request.POST,
+            prefix="test_rules_form",
+        )
+        if form.is_valid():
+            for cache_name in {
+                getattr(settings, "IPRESTRICT_CACHE", "default"),
+                getattr(settings, "RATELIMIT_CACHE", "default"),
+            }:
+                caches[cache_name].clear()
+        return HttpResponseRedirect(f"{form.cleaned_data.get('link_back', '../')}")
 
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
         try:

@@ -4,33 +4,28 @@
     <div>
         <form action="../rule/test_rules/" method="POST">
             {% csrf_token %}
-            <div>
-                <label>
-                    Test ip
-                    <input name="test_ip" />
-                    (leave empty to use current ip address)
-                </label>
-            </div>
-            <div>
-                <label>
-                    Test path
-                    <input type="path" name="test_path" />
-                    (leave empty to test ip addresses only)
-                </label>
-            </div>
-            <div>
-                <label>
-                    Test method
-                    <input type="method" name="test_method" />
-                    (leave empty to don't use method testing)
-                </label>
-            </div>
-            <div style="display: flex; gap: 4px; margin-top: 8px;">
-                <button type="submit">Test rules</button>
-                <button type="submit" formaction="../rule/clear_caches/">Clear caches</button>
-                <a href="../rule/simulate_rules/">simulate rules</a>
+            {% for field in test_rules_form.hidden_fields %}
+                {{ field }}
+            {% endfor %}
+            <div style="display: flex; gap: 8px; flex-direction: column; width: fit-content;">
+                {% for field in test_rules_form.visible_fields %}
+                    <div>
+                        {% if field.label %}{{ field.label_tag }}{% endif %}
+                        {{ field.errors }}
+                        {{ field }}
+                        {% if field.help_text %}<div class="helptext"{% if field.auto_id %} id="{{ field.auto_id }}_helptext"{% endif %}>{{ field.help_text|safe }}</div>{% endif %}
 
+                    </div>
+                    <hr/>
+                {% endfor %}
+                <div style="display: flex; gap: 8px">
+                    <button type="submit">Test rules</button>
+                    <button type="submit" formaction="../rule/clear_caches/">Clear caches</button>
+                    <a href="../rule/simulate_rules/">simulate rules</a>
+
+                </div>
             </div>
+
         </form>
     </div>
     <br />
