@@ -25,7 +25,7 @@ def fast_iprestrict(get_response):
                 for rdict in ratelimits:
                     r = await ratelimit.aget_ratelimit(
                         request=request,
-                        action=ratelimit.Action(rdict["action"]),
+                        action=rdict["action"],
                         group=rdict["group"],
                         key=rdict["key"],
                         rate=rdict["rate"],
@@ -52,7 +52,7 @@ def fast_iprestrict(get_response):
                 for rdict in ratelimits:
                     r = ratelimit.get_ratelimit(
                         request=request,
-                        action=ratelimit.Action(rdict["action"]),
+                        action=rdict["action"],
                         group=rdict["group"],
                         key=rdict["key"],
                         rate=rdict["rate"],

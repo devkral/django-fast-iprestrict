@@ -45,9 +45,7 @@ if ratelimit:
         for rdict in ratelimits:
             r = ratelimit.get_ratelimit(
                 request=request,
-                action=ratelimit.Action.PEEK
-                if execute_only
-                else ratelimit.Action(rdict["action"]),
+                action=ratelimit.Action.PEEK if execute_only else rdict["action"],
                 group=rdict["group"],
                 key=rdict["key"],
                 rate=rdict["rate"],
@@ -94,9 +92,7 @@ if ratelimit:
         for rdict in ratelimits:
             r = await ratelimit.aget_ratelimit(
                 request=request,
-                action=ratelimit.Action.PEEK
-                if execute_only
-                else ratelimit.Action(rdict["action"]),
+                action=ratelimit.Action.PEEK if execute_only else rdict["action"],
                 group=rdict["group"],
                 key=rdict["key"],
                 rate=rdict["rate"],
