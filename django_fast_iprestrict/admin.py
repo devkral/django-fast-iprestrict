@@ -174,7 +174,8 @@ class RuleAdmin(TestRulesMixin, admin.ModelAdmin):
 
     def rule_move(self, request: HttpRequest, object_id):
         if request.method != "POST":
-            return HttpResponseRedirect("../")
+            # fail soft for browsers visiting this url
+            return HttpResponseRedirect("../../")
         direction = request.POST["rule_move_direction"]
         parent_path = dirname(request.path.rstrip("/"))
         try:
@@ -233,6 +234,7 @@ class RuleAdmin(TestRulesMixin, admin.ModelAdmin):
         from django.contrib.messages import ERROR, INFO, SUCCESS, WARNING
 
         if request.method != "POST":
+            # fail soft for browsers visiting this url
             return HttpResponseRedirect("../")
         form = TestRulesForm(
             request.POST,
@@ -285,12 +287,14 @@ class RuleAdmin(TestRulesMixin, admin.ModelAdmin):
 
     def clear_iprestrict_caches(self, request):
         if request.method != "POST":
-            raise HttpResponseBadRequest("invalid method")
+            # fail soft for browsers visiting this url
+            raise HttpResponseRedirect("../")
         form = LinkBackForm(
             request.POST,
             prefix="test_rules_form",
         )
         if form.is_valid():
+            # set => deduplicating
             for cache_name in {
                 getattr(settings, "IPRESTRICT_CACHE", "default"),
                 getattr(settings, "RATELIMIT_CACHE", "default"),

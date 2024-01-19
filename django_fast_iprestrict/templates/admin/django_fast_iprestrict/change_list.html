@@ -1,8 +1,9 @@
 {% extends "admin/change_list.html" %}
 
-{% block object-tools %}
-    <div>
-        <form action="../rule/test_rules/" method="POST">
+{% block pretitle %}
+    <details open="open">
+        <summary>Test rules</summary>
+        <form action="../rule/test_rules/" method="POST" style="margin-top: 8px;">
             {% csrf_token %}
             {% for field in test_rules_form.hidden_fields %}
                 {{ field }}
@@ -18,16 +19,17 @@
                     </div>
                     <hr/>
                 {% endfor %}
-                <div style="display: flex; gap: 8px">
-                    <button type="submit">Test rules</button>
-                    <button type="submit" formaction="../rule/clear_caches/">Clear caches</button>
+                <div style="display: flex; flex-direction: row; align-items: center; gap: 8px">
+                    {# input is better styled but there is no way to add an hidden value #}
+                    <input type="submit" value="Test rules"/>
+                    <input type="submit" formaction="../rule/clear_caches/" value="Clear caches"/>
                     <a href="../rule/simulate_rules/">simulate rules</a>
 
                 </div>
             </div>
 
         </form>
-    </div>
+    </details>
     <br />
     {{ block.super }}
 {% endblock %}
