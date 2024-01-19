@@ -65,19 +65,83 @@ The rule names can be used for the django-fast-ratelimit adapter:
 
 import django_fast_ratelimit as ratelimit
 
-r = ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict", groups="rulename", rate="1/1s")
+r = ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict", groups="rulename")
+
+# since django-fast-ratelimit 7.3, rate is not required anymore for older versions add stub rate
+# Note: stub rates like 0/s will still raise Disabled
+r = ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict", groups="rulename", rate="1/s")
 
 # or when only checking ips and not pathes (when pathes are available)
 
-r = ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict:ignore_pathes", groups="rulename", rate="1/1s")
+r = ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict:ignore_pathes", groups="rulename")
 
 # or when only checking ips and not pathes (when pathes are available) and requiring rule
-r = ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict:ignore_pathes,require_rule", groups="rulename", rate="1/1s")
+r = ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict:ignore_pathes,require_rule", groups="rulename")
+
+# tuple/array syntax
+r = ratelimit.get_ratelimit(key=["django_fast_iprestrict.apply_iprestrict", "ignore_pathes", "require_rule"], groups="rulename")
+
 
 # or as decorator with rule requirement
-@ratelimit(key="django_fast_iprestrict.apply_iprestrict:require_rule", groups="rulename", rate="1/1s")
+@ratelimit.decorate(key="django_fast_iprestrict.apply_iprestrict:require_rule", groups="rulename")
 def foo(request):
     return ""
+
+
+```
+
+The following arguments are valid:
+
+-   `ignore_pathes`: match only via ip
+-   `require_rule`: raise Disabled if rule with rulename not exist
+-   `execute_only`: only decorate request, evaluate matching iprestrict rule action, wait and block, don't modify the ratelimit counter, for two-phased execution models
+-   `count_only`: don't apply wait and block, when rule exists return only 0 (allowed), update the counter only and decorate request, for two-phased execution models
+
+Note: when the request is already annotated with a ratelimit with the same decorate_name both instances are merged
+
+#### two phased execution model
+
+Especially with async code it can be handy to have two phases:
+
+an execution phase in which only wait/block is executed and the counter not modified. Its place is before an expensive function.
+The most common place is a decorator in urls. `execute_only` argument
+
+a count phase in which the ratelimit counter in cache is modified. Its place is after/in an expensive function.
+In case of invariants or if the calculated result should not be wasted, no actions are executed. `count_only` argument
+
+views.py:
+
+```python
+import django_fast_ratelimit as ratelimit
+from django.views import View
+from django.http.import HttpResponse
+
+class MyView(View):
+    def get(self, request):
+        # without count only
+        ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict", groups="rulename", request=request)
+        return HttpResponse(b"foo", status=200)
+    def post(self, request):
+        # expensive function
+        ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict:count_only", groups="rulename", request=request)
+        return HttpResponse(b"foo", status=200)
+
+
+```
+
+urls.py:
+
+```python
+import django_fast_ratelimit as ratelimit
+from .views import MyView
+
+urlpatterns = [
+    path(
+        "foo/",
+        ratelimit.decorate(key="django_fast_iprestrict.apply_iprestrict:execute_only", groups="rulename")(MyView.as_view()),
+    ),
+]
+
 
 ```
 
@@ -129,7 +193,7 @@ RATELIMIT_TRUSTED_PROXIES: fallback when IPRESTRICT_TRUSTED_PROXIES is unset
 IPRESTRICT_TESTCLIENT_FALLBACK: fallback for the string testclient in the ip field. Dev setting for tests
 RATELIMIT_TESTCLIENT_FALLBACK: fallback when IPRESTRICT_TESTCLIENT_FALLBACK is unset
 
-The ratelimit settings are fallbacks, so the settings must only be set on one place.
+The ratelimit settings are fallbacks, so when set the settings is applied for django-fast-ratelimit and django-fast-iprestrict (handy shortcut).
 
 Note: when using ratelimit the ratelimit settings are used for ratelimits, they can differ when not using the fallback
 

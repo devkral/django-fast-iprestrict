@@ -5,7 +5,7 @@ import django_fast_ratelimit as ratelimit
 from django.contrib.auth.models import User
 from django.test import RequestFactory, TestCase, override_settings
 
-from django_fast_iprestrict.models import Rule, RuleSource
+from django_fast_iprestrict.models import RATELIMIT_ACTION, Rule, RuleSource
 from django_fast_iprestrict.utils import RULE_ACTION, LockoutException
 
 admin_index_pages = [
@@ -144,6 +144,40 @@ class SyncTests(TestCase):
         with self.assertLogs():
             RuleSource.objects.ip_matchers_remote([rule])
 
+    def test_as_ratelimit_fn_two_phased(self):
+        @ratelimit.decorate(
+            key="django_fast_iprestrict.apply_iprestrict:execute_only",
+            group="test",
+        )
+        def fn(request):
+            return "foo"
+
+        factory = RequestFactory()
+        rule = Rule.objects.create(name="test", action=RULE_ACTION.only_ratelimit)
+        rule.ratelimits.create(
+            key="static",
+            rate="1/2m",
+            group="test_as_ratelimit_fn_two_phased",
+            block=True,
+            is_active=True,
+            action=RATELIMIT_ACTION.INCREASE,
+        )
+        for i in range(3):
+            request = factory.get("/foobar/")
+            fn(request)
+        for i in range(3):
+            request = factory.get("/foobar/")
+            ratelimit.get_ratelimit(
+                request=request,
+                key="django_fast_iprestrict.apply_iprestrict:count_only",
+                group="test",
+            )
+        with self.assertRaises(ratelimit.RatelimitExceeded):
+            request = factory.get("/foobar/")
+            fn(
+                request,
+            )
+
     def test_as_ratelimit_fn_plain(self):
         rule_unrelated = Rule.objects.create(name="unrelated", action=RULE_ACTION.deny)
         rule_unrelated.pathes.create(path=".*", is_regex=True)
@@ -154,7 +188,6 @@ class SyncTests(TestCase):
             request=request,
             key="django_fast_iprestrict.apply_iprestrict",
             group="test",
-            rate="1/1s",
         )
         self.assertGreaterEqual(r.request_limit, 1)
         rule.action = RULE_ACTION.allow.value
@@ -164,7 +197,6 @@ class SyncTests(TestCase):
             request=request,
             key="django_fast_iprestrict.apply_iprestrict",
             group="test",
-            rate="1/1s",
         )
         self.assertGreaterEqual(r.request_limit, 0)
         request = factory.get("/foobar/")
@@ -172,7 +204,6 @@ class SyncTests(TestCase):
             request=request,
             key="django_fast_iprestrict.apply_iprestrict:require_rule",
             group="test2",
-            rate="1/1s",
         )
         self.assertGreaterEqual(r.request_limit, 1)
 
@@ -187,7 +218,6 @@ class SyncTests(TestCase):
             request=request,
             key="django_fast_iprestrict.apply_iprestrict",
             group="test",
-            rate="1/1s",
         )
         self.assertGreaterEqual(r.request_limit, 1)
         request = factory.get("/foobar2/")
@@ -195,7 +225,6 @@ class SyncTests(TestCase):
             request=request,
             key="django_fast_iprestrict.apply_iprestrict",
             group="test",
-            rate="1/1s",
         )
         self.assertEqual(r.request_limit, 0)
         request = factory.get("/foobar2/")
@@ -203,7 +232,6 @@ class SyncTests(TestCase):
             request=request,
             key="django_fast_iprestrict.apply_iprestrict:ignore_pathes",
             group="test",
-            rate="1/1s",
         )
         self.assertEqual(r.request_limit, 0)  # is not a catch all because of pathes
         rule.networks.create(network="0.0.0.0/0")
@@ -213,7 +241,6 @@ class SyncTests(TestCase):
             request=request,
             key="django_fast_iprestrict.apply_iprestrict:ignore_pathes",
             group="test",
-            rate="1/1s",
         )
         self.assertEqual(r.request_limit, 1)
         request = factory.get("/foobar/")
@@ -221,7 +248,6 @@ class SyncTests(TestCase):
             request=request,
             key="django_fast_iprestrict.apply_iprestrict:require_rule,ignore_pathes",
             group="test2",
-            rate="1/1s",
         )
         self.assertGreaterEqual(r.request_limit, 1)
 

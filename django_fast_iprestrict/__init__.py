@@ -20,6 +20,8 @@ if ratelimit:
         action=None,
         ignore_pathes=False,
         require_rule=False,
+        execute_only=False,
+        count_only=False,
     ):
         # don't check methods here as the check is done in ratelimit
         from .models import Rule, RulePath
@@ -29,8 +31,8 @@ if ratelimit:
             if require_rule:
                 return 1
             return int(get_default_action() == RULE_ACTION.deny)
-        with_path = False
         ip = get_ip(request)
+        with_path = False
         if not ignore_pathes:
             with_path = rule.id in RulePath.objects.path_matchers()
         if with_path:
@@ -43,15 +45,19 @@ if ratelimit:
         for rdict in ratelimits:
             r = ratelimit.get_ratelimit(
                 request=request,
-                action=ratelimit.Action(rdict["action"]),
+                action=ratelimit.Action.PEEK
+                if execute_only
+                else ratelimit.Action(rdict["action"]),
                 group=rdict["group"],
                 key=rdict["key"],
                 rate=rdict["rate"],
             )
             r.decorate_object(
-                request, name=rdict["decorate_name"], block=rdict["block"]
+                request,
+                name=rdict["decorate_name"],
+                block=rdict["block"] and not count_only,
             )
-        if action == RULE_ACTION.deny.value:
+        if action == RULE_ACTION.deny and not count_only:
             return 1
         return 0
 
@@ -61,6 +67,8 @@ if ratelimit:
         action=None,
         ignore_pathes=False,
         require_rule=False,
+        execute_only=False,
+        count_only=False,
     ):
         # don't check methods here as the check is done in ratelimit
         from .models import Rule, RulePath
@@ -70,8 +78,9 @@ if ratelimit:
             if require_rule:
                 return 1
             return int(get_default_action() == RULE_ACTION.deny)
-        with_path = False
         ip = get_ip(request)
+
+        with_path = False
         if not ignore_pathes:
             with_path = rule.id in await RulePath.objects.apath_matchers()
         if with_path:
@@ -85,7 +94,9 @@ if ratelimit:
         for rdict in ratelimits:
             r = await ratelimit.aget_ratelimit(
                 request=request,
-                action=ratelimit.Action(rdict["action"]),
+                action=ratelimit.Action.PEEK
+                if execute_only
+                else ratelimit.Action(rdict["action"]),
                 group=rdict["group"],
                 key=rdict["key"],
                 rate=rdict["rate"],
@@ -93,10 +104,10 @@ if ratelimit:
             await r.adecorate_object(
                 request,
                 name=rdict["decorate_name"],
-                wait=rdict["wait"],
-                block=rdict["block"],
+                wait=rdict["wait"] and not count_only,
+                block=rdict["block"] and not count_only,
             )
-        if action == RULE_ACTION.deny.value:
+        if action == RULE_ACTION.deny and not count_only:
             return 1
         return 0
 
@@ -112,12 +123,15 @@ if ratelimit:
             return _apply_iprestrict(request, group, action, **kwargs)
 
     @apply_iprestrict.register(str)
-    def _(arg: str = ""):
-        args = arg.split(",")
+    def _(arg: str = "", *args):
+        args = list(args)
+        args.extend(arg.split(","))
         return partial(
             apply_iprestrict.dispatch(HttpRequest),
             ignore_pathes="ignore_pathes" in args,
             require_rule="require_rule" in args,
+            execute_only="execute_only" in args,
+            count_only="count_only" in args,
         )
 
 else:
