@@ -15,7 +15,14 @@ from django.urls import path
 from django.utils.html import format_html
 
 from .forms import LinkBackForm, TestRulesForm
-from .models import Rule, RuleNetwork, RulePath, RuleRatelimit, RuleSource
+from .models import (
+    Rule,
+    RuleNetwork,
+    RulePath,
+    RuleRatelimit,
+    RuleRatelimitGroup,
+    RuleSource,
+)
 from .utils import RULE_ACTION, LockoutException, get_ip, parse_ipaddress
 
 try:
@@ -87,6 +94,10 @@ class RuleSourceInlineAdmin(ExtraOnlyOnInitialMixin, admin.TabularInline):
     model = RuleSource
 
 
+class RuleRatelimitGroupInlineAdmin(ExtraOnlyOnInitialMixin, admin.TabularInline):
+    model = RuleRatelimitGroup
+
+
 # reuse the existing form to prevent form nesting
 _position_template = """
 <div style="display:flex; gap: 16px" >
@@ -147,6 +158,7 @@ class RuleAdmin(TestRulesMixin, admin.ModelAdmin):
         RuleSourceInlineAdmin,
         RulePathInlineAdmin,
         RuleRatelimitInlineAdmin,
+        RuleRatelimitGroupInlineAdmin,
     ]
 
     @admin.display(description="")
@@ -242,6 +254,9 @@ class RuleAdmin(TestRulesMixin, admin.ModelAdmin):
         )
         if form.is_valid():
             test_method = request.POST.get("test_method", None) or None
+            test_ratelimit_group = (
+                form.cleaned_data.get("test_ratelimit_group", None) or None
+            )
 
             test_ip = form.cleaned_data.get("test_ip", None)
             if not test_ip:
@@ -250,15 +265,22 @@ class RuleAdmin(TestRulesMixin, admin.ModelAdmin):
             test_path = form.cleaned_data.get("test_path", None) or ""
             if test_path:
                 rule_id = RulePath.objects.match_ip_and_path(
-                    ip=test_ip, path=test_path, method=test_method
+                    ip=test_ip,
+                    path=test_path,
+                    method=test_method,
+                    ratelimit_group=test_ratelimit_group,
                 )[0]
                 self.message_user(
                     request,
-                    f"Parameters: ip: {parse_ipaddress(test_ip)}, path: {test_path}, method: {test_method or '-'}",
+                    f"Parameters: ip: {parse_ipaddress(test_ip)}, path: {test_path}, method: {test_method or '-'}, ratelimit group: {test_ratelimit_group or '-'}",
                     level=INFO,
                 )
             else:
-                rule_id = Rule.objects.match_ip(ip=test_ip, method=test_method)[0]
+                rule_id = Rule.objects.match_ip(
+                    ip=test_ip,
+                    method=test_method,
+                    ratelimit_group=test_ratelimit_group,
+                )[0]
                 self.message_user(
                     request,
                     f"Parameters: ip: {parse_ipaddress(test_ip)}, method: {test_method or '-'}",
@@ -364,6 +386,12 @@ class RulePathAdmin(RuleSubMixin, admin.ModelAdmin):
 class RuleNetworkAdmin(RuleSubMixin, admin.ModelAdmin):
     list_display = ("rule", "network", "is_active")
     ordering = ("rule", "id")
+
+
+@admin.register(RuleRatelimitGroup)
+class RuleRatelimitGroupAdmin(RuleSubMixin, admin.ModelAdmin):
+    list_display = ("rule", "name", "is_active")
+    ordering = ("rule", "name")
 
 
 @admin.register(RuleSource)

@@ -153,7 +153,10 @@ class SyncTests(TestCase):
             return "foo"
 
         factory = RequestFactory()
-        rule = Rule.objects.create(name="test", action=RULE_ACTION.only_ratelimit)
+        rule = Rule.objects.create(
+            name="arbitary_name", action=RULE_ACTION.only_ratelimit
+        )
+        rule.ratelimit_groups.create(name="test")
         rule.ratelimits.create(
             key="static",
             rate="1/2m",
@@ -182,7 +185,8 @@ class SyncTests(TestCase):
         rule_unrelated = Rule.objects.create(name="unrelated", action=RULE_ACTION.deny)
         rule_unrelated.pathes.create(path=".*", is_regex=True)
         factory = RequestFactory()
-        rule = Rule.objects.create(name="test", action=RULE_ACTION.deny)
+        rule = Rule.objects.create(name="arbitary_name", action=RULE_ACTION.deny)
+        rule.ratelimit_groups.create(name="test")
         request = factory.get("/foobar/")
         r = ratelimit.get_ratelimit(
             request=request,
@@ -211,7 +215,8 @@ class SyncTests(TestCase):
         rule_unrelated = Rule.objects.create(name="unrelated", action=RULE_ACTION.deny)
         rule_unrelated.pathes.create(path=".*", is_regex=True)
         factory = RequestFactory()
-        rule = Rule.objects.create(name="test", action=RULE_ACTION.deny)
+        rule = Rule.objects.create(name="arbitary_name", action=RULE_ACTION.deny)
+        rule.ratelimit_groups.create(name="test")
         rule.pathes.create(path="/foobar/")
         request = factory.get("/foobar/")
         r = ratelimit.get_ratelimit(

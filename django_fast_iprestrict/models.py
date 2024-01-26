@@ -26,6 +26,7 @@ from .utils import (
     parse_ipnetwork,
 )
 from .validators import (
+    min_length_1,
     validate_generator_fn,
     validate_methods,
     validate_network,
@@ -63,6 +64,7 @@ class RuleManager(models.Manager):
 
     def clear_local_caches(self):
         RulePath.objects.path_matchers.cache_clear()
+        RuleRatelimitGroup.objects.name_matchers.cache_clear()
         self._ip_matchers_local.cache_clear()
         self._next_rules_updates = time.monotonic() + _update_interval_secs
 
@@ -106,6 +108,7 @@ class RuleManager(models.Manager):
     def _ip_matchers_local(self, generic=False):
         # ordered dict
         patterns = {}
+        name_matchers = RuleRatelimitGroup.objects.name_matchers()[0]
         queryset = self.annotate(
             has_networks=models.Exists(
                 RuleNetwork.objects.filter(
@@ -128,9 +131,10 @@ class RuleManager(models.Manager):
             patterns[obj.id] = (
                 ["*"] if obj._is_catchall() else obj.get_processed_networks(),  # 0
                 obj.get_methods(),  # 1
-                RULE_ACTION(obj.action),  # 2
-                obj._is_catchall(),  # 3
-                obj.get_ratelimit_dicts(),  # 4
+                name_matchers.get(obj.id, _empty),  # 2
+                RULE_ACTION(obj.action),  # 3
+                obj._is_catchall(),  # 4
+                obj.get_ratelimit_dicts(),  # 5
             )
         return patterns
 
@@ -145,7 +149,8 @@ class RuleManager(models.Manager):
         self,
         ip: str,
         method: Optional[str] = None,
-        rule_id=None,
+        ratelimit_group: Optional[str] = None,
+        rule_id: Optional[int] = None,
         generic=False,
         remote=True,
     ):
@@ -157,10 +162,16 @@ class RuleManager(models.Manager):
             if method and method not in item[1]:
                 return None, get_default_action(), False, _empty
 
+            if ratelimit_group:
+                if ratelimit_group not in item[2]:
+                    return None, get_default_action(), False, _empty
+            elif item[2]:
+                return None, get_default_action(), False, _empty
+
             for network in item[0]:
                 try:
                     if network == "*" or ip_address_user in network:
-                        return rule_id, *item[2:]
+                        return rule_id, *item[3:]
                 except TypeError:
                     pass
             if remote:
@@ -171,7 +182,7 @@ class RuleManager(models.Manager):
                     for network in remote_networks:
                         try:
                             if ip_address_user in network:
-                                return rule_id, *item[2:]
+                                return rule_id, *item[3:]
                         except TypeError:
                             pass
 
@@ -185,17 +196,23 @@ class RuleManager(models.Manager):
             for rule_id, item in ip_matchers.items():
                 if method and method not in item[1]:
                     continue
+                if ratelimit_group:
+                    if ratelimit_group not in item[2]:
+                        continue
+                elif item[2]:
+                    continue
+
                 for network in item[0]:
                     try:
                         if network == "*" or ip_address_user in network:
-                            return rule_id, *item[2:]
+                            return rule_id, *item[3:]
                     except TypeError:
                         pass
 
                 for network in ip_matchers_remote.get(str(rule_id), _empty):
                     try:
                         if ip_address_user in network:
-                            return rule_id, *item[2:]
+                            return rule_id, *item[3:]
                     except TypeError:
                         pass
         return None, get_default_action(), False, _empty
@@ -203,7 +220,12 @@ class RuleManager(models.Manager):
     aip_match_ip = sync_to_async(match_ip)
 
     def match_all_ip(
-        self, ip: str, method: Optional[str] = None, remote=True, generic=False
+        self,
+        ip: str,
+        method: Optional[str] = None,
+        ratelimit_group=None,
+        remote=True,
+        generic=False,
     ):
         # note: cannot apply ratelimit here
         ip_address_user = parse_ipaddress(ip)
@@ -213,11 +235,16 @@ class RuleManager(models.Manager):
         for rule_id, item in ip_matchers.items():
             if method and method not in item[1]:
                 continue
+            if ratelimit_group:
+                if ratelimit_group not in item[2]:
+                    continue
+            elif item[2]:
+                continue
             found_local_network = False
             for network in item[0]:
                 try:
                     if network == "*" or ip_address_user in network:
-                        result.append((rule_id, *item[2:]))
+                        result.append((rule_id, *item[3:]))
                         found_local_network = True
                         break
                 except TypeError:
@@ -388,6 +415,48 @@ class RuleRatelimit(models.Model):
     is_active = models.BooleanField(blank=True, default=True)
 
     objects = RuleRatelimitManager()
+
+
+class RuleRatelimitGroupManager(models.Manager):
+    @lru_cache(maxsize=1)
+    def name_matchers(self):
+        rule_id_to_names = {}
+        name_has_pathes = set()
+        for obj in self.filter(is_active=True).annotate(
+            has_pathes=models.Exists(
+                RulePath.objects.filter(
+                    is_active=True, rule_id=models.OuterRef("rule_id")
+                )
+            )
+        ):
+            if obj.has_pathes:
+                name_has_pathes.add(obj.name)
+            set_ob = rule_id_to_names.setdefault(obj.rule_id, set())
+            set_ob.add(obj.name)
+        return rule_id_to_names, name_has_pathes
+
+    aname_matchers = sync_to_async(name_matchers)
+
+
+class RuleRatelimitGroup(models.Model):
+    rule = models.ForeignKey(
+        Rule, related_name="ratelimit_groups", on_delete=models.CASCADE
+    )
+    name = models.CharField(
+        max_length=80,
+        help_text="ratelimit group name",
+        validators=[min_length_1],
+    )
+    is_active = models.BooleanField(blank=True, default=True)
+
+    objects = RuleRatelimitGroupManager()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["rule_id", "name"], name="rule_ratelimit_groups_unique"
+            )
+        ]
 
 
 class RuleNetwork(models.Model):
@@ -595,6 +664,7 @@ class RulePathManager(models.Manager):
         ip: str,
         path: str,
         method: Optional[str] = None,
+        ratelimit_group: Optional[str] = None,
         rule_id=None,
         remote=True,
     ):
@@ -602,13 +672,22 @@ class RulePathManager(models.Manager):
         # with generic = pathless, non-catchall and disabled candidates are included
         if rule_id:
             candidate = Rule.objects.match_ip(
-                ip, rule_id=rule_id, method=method, remote=remote, generic=True
+                ip,
+                rule_id=rule_id,
+                method=method,
+                ratelimit_group=ratelimit_group,
+                remote=remote,
+                generic=True,
             )
             if candidate[0] is not None:
                 candidates = [candidate]
         else:
             candidates = Rule.objects.match_all_ip(
-                ip, method=method, remote=remote, generic=True
+                ip,
+                method=method,
+                ratelimit_group=ratelimit_group,
+                remote=remote,
+                generic=True,
             )
         _path_matchers = self.path_matchers()
         ratelimits = []

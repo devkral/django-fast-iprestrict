@@ -27,7 +27,7 @@ class DjangoFastIprestrictConfig(AppConfig):
     name = "django_fast_iprestrict"
 
     def ready(self):
-        from .models import Rule, RuleNetwork, RulePath
+        from .models import Rule, RuleNetwork, RulePath, RuleRatelimitGroup
 
         post_delete.connect(
             signal_position_cleanup,
@@ -60,4 +60,15 @@ class DjangoFastIprestrictConfig(AppConfig):
             clear_local_caches,
             sender=RulePath,
             dispatch_uid="django-fast-iprestrict-after-deletion-rule-path",
+        )
+
+        post_save.connect(
+            clear_local_caches,
+            sender=RuleRatelimitGroup,
+            dispatch_uid="django-fast-iprestrict-after-save-rule-ratelimit-group",
+        )
+        post_delete.connect(
+            clear_local_caches,
+            sender=RuleRatelimitGroup,
+            dispatch_uid="django-fast-iprestrict-after-deletion-rule-ratelimit-group",
         )

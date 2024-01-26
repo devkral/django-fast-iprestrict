@@ -3,7 +3,7 @@ import re
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.validators import MinLengthValidator
+from django.core.validators import MinLengthValidator, RegexValidator
 
 
 def validate_network(value):
@@ -36,10 +36,7 @@ def validate_regex(value):
         raise ValidationError("Invalid regex.", code="invalid", params={"value": value})
 
 
-def validate_path(value):
-    # FIXME
-    pass
-
+validate_path = RegexValidator(r"^/[^?#]+/?$")
 
 min_length_1 = MinLengthValidator(1)
 
@@ -98,8 +95,19 @@ def validate_rate(value):
         raise ValidationError("Invalid rate", code="invalid", params={"value": value})
 
 
-def validate_methods(value):
-    if not all(map(lambda x: x.strip().isalpha(), value.split(","))):
+def validate_method(value):
+    if not value.strip().isalpha():
         raise ValidationError(
             "Invalid methods", code="invalid", params={"value": value}
         )
+
+
+def validate_methods(value):
+    errors = []
+    for elem in value.split(","):
+        try:
+            validate_method(elem)
+        except ValidationError as exc:
+            errors.append(exc)
+    if errors:
+        raise ValidationError(errors)

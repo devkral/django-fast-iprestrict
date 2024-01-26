@@ -5,7 +5,7 @@ from functools import partial, singledispatch
 
 from django.http import HttpRequest
 
-from .utils import RULE_ACTION, get_default_action, get_ip
+from .utils import RULE_ACTION, get_ip
 
 try:
     import django_fast_ratelimit as ratelimit
@@ -24,23 +24,23 @@ if ratelimit:
         count_only=False,
     ):
         # don't check methods here as the check is done in ratelimit
-        from .models import Rule, RulePath
+        from .models import Rule, RulePath, RuleRatelimitGroup
 
-        rule = Rule.objects.filter(name=group).first()
-        if not rule:
-            if require_rule:
-                return 1
-            return int(get_default_action() == RULE_ACTION.deny)
         ip = get_ip(request)
         with_path = False
         if not ignore_pathes:
-            with_path = rule.id in RulePath.objects.path_matchers()
+            name_has_pathes = RuleRatelimitGroup.objects.name_matchers()[1]
+            with_path = group in name_has_pathes
         if with_path:
-            action, _, ratelimits = RulePath.objects.match_ip_and_path(
-                ip=ip, path=request.path, rule_id=rule.id
-            )[1:]
+            rule_id, action, _, ratelimits = RulePath.objects.match_ip_and_path(
+                ip=ip, path=request.path, ratelimit_group=group
+            )
         else:
-            action, _, ratelimits = rule.match_ip(ip=ip)[1:]
+            rule_id, action, _, ratelimits = Rule.objects.match_ip(
+                ip=ip, ratelimit_group=group
+            )
+        if rule_id is None and require_rule:
+            return 1
 
         for rdict in ratelimits:
             r = ratelimit.get_ratelimit(
@@ -69,26 +69,24 @@ if ratelimit:
         count_only=False,
     ):
         # don't check methods here as the check is done in ratelimit
-        from .models import Rule, RulePath
+        from .models import Rule, RulePath, RuleRatelimitGroup
 
-        rule = await Rule.objects.filter(name=group).afirst()
-        if not rule:
-            if require_rule:
-                return 1
-            return int(get_default_action() == RULE_ACTION.deny)
         ip = get_ip(request)
 
         with_path = False
         if not ignore_pathes:
-            with_path = rule.id in await RulePath.objects.apath_matchers()
+            name_has_pathes = (await RuleRatelimitGroup.objects.aname_matchers())[1]
+            with_path = group in name_has_pathes
         if with_path:
-            action, _, ratelimits = (
-                await RulePath.objects.amatch_ip_and_path(
-                    ip=ip, path=request.path, rule_id=rule.id
-                )
-            )[1:]
+            rule_id, action, _, ratelimits = await RulePath.objects.amatch_ip_and_path(
+                ip=ip, path=request.path, ratelimit_group=group
+            )
         else:
-            action, _, ratelimits = (await rule.amatch_ip(ip=ip))[1:]
+            rule_id, action, _, ratelimits = await Rule.objects.amatch_ip(
+                ip=ip, ratelimit_group=group
+            )
+        if rule_id is None and require_rule:
+            return 1
         for rdict in ratelimits:
             r = await ratelimit.aget_ratelimit(
                 request=request,
