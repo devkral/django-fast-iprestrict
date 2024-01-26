@@ -40,7 +40,10 @@ if ratelimit:
                 ip=ip, ratelimit_group=group
             )
         if rule_id is None and require_rule:
-            return 1
+            raise ratelimit.Disabled(
+                "no rule found for %s" % group,
+                ratelimit=ratelimit.Ratelimit(group=group, request_limit=1, end=0),
+            )
 
         for rdict in ratelimits:
             r = ratelimit.get_ratelimit(
@@ -86,7 +89,10 @@ if ratelimit:
                 ip=ip, ratelimit_group=group
             )
         if rule_id is None and require_rule:
-            return 1
+            raise ratelimit.Disabled(
+                "no rule found for %s" % group,
+                ratelimit=ratelimit.Ratelimit(group=group, request_limit=1, end=0),
+            )
         for rdict in ratelimits:
             r = await ratelimit.aget_ratelimit(
                 request=request,

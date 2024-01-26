@@ -131,7 +131,9 @@ class RuleManager(models.Manager):
             patterns[obj.id] = (
                 ["*"] if obj._is_catchall() else obj.get_processed_networks(),  # 0
                 obj.get_methods(),  # 1
-                name_matchers.get(obj.id, _empty),  # 2
+                name_matchers.get(
+                    obj.id, _empty
+                ),  # 2, note MUST be _empty otherwise the detection if a RuleRatelimitGroup is just disabled fails
                 RULE_ACTION(obj.action),  # 3
                 obj._is_catchall(),  # 4
                 obj.get_ratelimit_dicts(),  # 5
@@ -165,7 +167,7 @@ class RuleManager(models.Manager):
             if ratelimit_group:
                 if ratelimit_group not in item[2]:
                     return None, get_default_action(), False, _empty
-            elif item[2]:
+            elif item[2] is not _empty:
                 return None, get_default_action(), False, _empty
 
             for network in item[0]:
@@ -199,7 +201,7 @@ class RuleManager(models.Manager):
                 if ratelimit_group:
                     if ratelimit_group not in item[2]:
                         continue
-                elif item[2]:
+                elif item[2] is not _empty:
                     continue
 
                 for network in item[0]:
@@ -238,7 +240,7 @@ class RuleManager(models.Manager):
             if ratelimit_group:
                 if ratelimit_group not in item[2]:
                     continue
-            elif item[2]:
+            elif item[2] is not _empty:
                 continue
             found_local_network = False
             for network in item[0]:
@@ -422,17 +424,19 @@ class RuleRatelimitGroupManager(models.Manager):
     def name_matchers(self):
         rule_id_to_names = {}
         name_has_pathes = set()
-        for obj in self.filter(is_active=True).annotate(
+        for obj in self.annotate(
             has_pathes=models.Exists(
                 RulePath.objects.filter(
                     is_active=True, rule_id=models.OuterRef("rule_id")
                 )
             )
         ):
-            if obj.has_pathes:
-                name_has_pathes.add(obj.name)
+            # we always annotate with a set, to differ from _empty
             set_ob = rule_id_to_names.setdefault(obj.rule_id, set())
-            set_ob.add(obj.name)
+            if obj.is_active:
+                if obj.has_pathes:
+                    name_has_pathes.add(obj.name)
+                set_ob.add(obj.name)
         return rule_id_to_names, name_has_pathes
 
     aname_matchers = sync_to_async(name_matchers)

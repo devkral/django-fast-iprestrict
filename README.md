@@ -59,31 +59,33 @@ Note: ipv4 and ipv6 rules are not interoperable. If the network does not match t
 
 ### programmatically
 
-The rule names can be used for the django-fast-ratelimit adapter:
+The rule names can be used for the django-fast-ratelimit adapter if RuleRatelimitGroups are defined and active. When some are defined the rule isn't used anymore in normal matching but only in apply_iprestrict.
+
+Note: deactivated RuleRatelimitGroups still prevent the normal mode, the RuleRatelimitGroups have to be deleted to revert to the normal matching
 
 ```python
 
 import django_fast_ratelimit as ratelimit
 
-r = ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict", groups="rulename")
+r = ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict", groups="groupname")
 
 # since django-fast-ratelimit 7.3, rate is not required anymore for older versions add stub rate
 # Note: stub rates like 0/s will still raise Disabled
-r = ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict", groups="rulename", rate="1/s")
+r = ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict", groups="groupname", rate="1/s")
 
 # or when only checking ips and not pathes (when pathes are available)
 
-r = ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict:ignore_pathes", groups="rulename")
+r = ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict:ignore_pathes", groups="groupname")
 
 # or when only checking ips and not pathes (when pathes are available) and requiring rule
-r = ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict:ignore_pathes,require_rule", groups="rulename")
+r = ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict:ignore_pathes,require_rule", groups="groupname")
 
 # tuple/array syntax
-r = ratelimit.get_ratelimit(key=["django_fast_iprestrict.apply_iprestrict", "ignore_pathes", "require_rule"], groups="rulename")
+r = ratelimit.get_ratelimit(key=["django_fast_iprestrict.apply_iprestrict", "ignore_pathes", "require_rule"], groups="groupname")
 
 
 # or as decorator with rule requirement
-@ratelimit.decorate(key="django_fast_iprestrict.apply_iprestrict:require_rule", groups="rulename")
+@ratelimit.decorate(key="django_fast_iprestrict.apply_iprestrict:require_rule", groups="groupname")
 def foo(request):
     return ""
 
@@ -142,8 +144,25 @@ urlpatterns = [
     ),
 ]
 
-
 ```
+
+#### really lowlevel (without ratelimit)
+
+There are currently 3 matching methods of interest
+````python
+from django_fast_iprestrict.models import Rule, RulePath
+
+
+Rule.objects.match_ip(ip="someip")
+Rule.objects.match_all_ip(ip="someip")
+RulePath.objects.match_ip_and_path(ip="someip", path="/foo")
+
+````
+
+Note: the matching methods have much more arguments. See in source for details
+
+You might want to ignore the generic argument of match_ip and match_all_ip, it is dangerous as it ignores disabled rules
+and can easily lead to lock outs
 
 ### Sources (GEOIP)
 
@@ -216,7 +235,11 @@ poetry run ./manage.py createsuperuser
 poetry run ./manage.py runserver
 
 ```
+# changes
+
+-   0.13: add RuleRatelimitGroup for explicitly use Rules with ratelimit. No longer just match the rule name
 
 # TODO
 
+-   filter for ratelimit enabled rules and not ratelimit enable rules
 -   localization?
