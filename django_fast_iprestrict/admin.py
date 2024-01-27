@@ -161,17 +161,6 @@ class RuleAdmin(TestRulesMixin, admin.ModelAdmin):
         RuleRatelimitGroupInlineAdmin,
     ]
 
-    @admin.display(description="")
-    def position_short(self, obj):
-        return obj.position
-
-    @admin.display(ordering="position")
-    def position_buttons(self, obj):
-        return format_html(
-            _position_template,
-            object_id=obj.id,
-        )
-
     def get_urls(self):
         return [
             path("test_rules/", self.test_rules),
@@ -183,6 +172,57 @@ class RuleAdmin(TestRulesMixin, admin.ModelAdmin):
             path("<str:object_id>/rule_move/", self.rule_move),
             *super().get_urls(),
         ]
+
+    def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
+        try:
+            return super().changeform_view(
+                request,
+                object_id=object_id,
+                form_url=form_url,
+                extra_context=extra_context,
+            )
+        except LockoutException:
+            context = {**self.admin_site.each_context(request), "link_back": "./"}
+            return TemplateResponse(
+                request,
+                "admin/django_fast_iprestrict/lockout_prevented.html",
+                context=context,
+                status=400,
+            )
+
+    def changelist_view(self, request, extra_context=None):
+        try:
+            return super().changelist_view(
+                request,
+                extra_context=extra_context,
+            )
+        except LockoutException:
+            context = {**self.admin_site.each_context(request), "link_back": "./"}
+            return TemplateResponse(
+                request,
+                "admin/django_fast_iprestrict/lockout_prevented.html",
+                context=context,
+                status=400,
+            )
+
+    def save_model(self, request, obj, form, change):
+        obj._trigger_cleanup = False
+        super().save_model(request, obj, form, change)
+
+    def delete_model(self, request, obj):
+        obj._trigger_cleanup = False
+        super().delete_model(request, obj)
+        Rule.objects.position_cleanup(ip=get_ip(request), path=request.path)
+
+    def delete_queryset(self, request, queryset):
+        super().delete_queryset(request, queryset)
+        parent_path = dirname(request.path.rstrip("/"))
+
+        Rule.objects.position_cleanup(ip=get_ip(request), path=parent_path)
+
+    def save_related(self, request, form, formsets, change):
+        super().save_related(request, form, formsets, change)
+        Rule.objects.position_cleanup(ip=get_ip(request), path=request.path)
 
     def rule_move(self, request: HttpRequest, object_id):
         if request.method != "POST":
@@ -324,56 +364,16 @@ class RuleAdmin(TestRulesMixin, admin.ModelAdmin):
                 caches[cache_name].clear()
         return HttpResponseRedirect(f"{form.cleaned_data.get('link_back', '../')}")
 
-    def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
-        try:
-            return super().changeform_view(
-                request,
-                object_id=object_id,
-                form_url=form_url,
-                extra_context=extra_context,
-            )
-        except LockoutException:
-            context = {**self.admin_site.each_context(request), "link_back": "./"}
-            return TemplateResponse(
-                request,
-                "admin/django_fast_iprestrict/lockout_prevented.html",
-                context=context,
-                status=400,
-            )
+    @admin.display(description="")
+    def position_short(self, obj):
+        return obj.position
 
-    def changelist_view(self, request, extra_context=None):
-        try:
-            return super().changelist_view(
-                request,
-                extra_context=extra_context,
-            )
-        except LockoutException:
-            context = {**self.admin_site.each_context(request), "link_back": "./"}
-            return TemplateResponse(
-                request,
-                "admin/django_fast_iprestrict/lockout_prevented.html",
-                context=context,
-                status=400,
-            )
-
-    def save_model(self, request, obj, form, change):
-        obj._trigger_cleanup = False
-        super().save_model(request, obj, form, change)
-
-    def delete_model(self, request, obj):
-        obj._trigger_cleanup = False
-        super().delete_model(request, obj)
-        Rule.objects.position_cleanup(ip=get_ip(request), path=request.path)
-
-    def delete_queryset(self, request, queryset):
-        super().delete_queryset(request, queryset)
-        parent_path = dirname(request.path.rstrip("/"))
-
-        Rule.objects.position_cleanup(ip=get_ip(request), path=parent_path)
-
-    def save_related(self, request, form, formsets, change):
-        super().save_related(request, form, formsets, change)
-        Rule.objects.position_cleanup(ip=get_ip(request), path=request.path)
+    @admin.display(ordering="position")
+    def position_buttons(self, obj):
+        return format_html(
+            _position_template,
+            object_id=obj.id,
+        )
 
 
 @admin.register(RulePath)
