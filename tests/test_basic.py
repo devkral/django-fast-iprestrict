@@ -160,7 +160,7 @@ class SyncTests(TestCase):
         rule.ratelimits.create(
             key="static",
             rate="1/2m",
-            group="test_as_ratelimit_fn_two_phased",
+            group="atest_as_ratelimit_fn_two_phased",
             block=True,
             is_active=True,
             action=RATELIMIT_ACTION.INCREASE,
@@ -203,13 +203,14 @@ class SyncTests(TestCase):
             group="test",
         )
         self.assertGreaterEqual(r.request_limit, 0)
-        request = factory.get("/foobar/")
-        r = ratelimit.get_ratelimit(
-            request=request,
-            key="django_fast_iprestrict.apply_iprestrict:require_rule",
-            group="test2",
-        )
-        self.assertGreaterEqual(r.request_limit, 1)
+        with self.assertRaises(ratelimit.Disabled) as cm:
+            request = factory.get("/foobar/")
+            ratelimit.get_ratelimit(
+                request=request,
+                key="django_fast_iprestrict.apply_iprestrict:require_rule",
+                group="test2",
+            )
+        self.assertGreaterEqual(cm.exception.ratelimit.request_limit, 1)
 
     def test_as_ratelimit_fn_pathes(self):
         rule_unrelated = Rule.objects.create(name="unrelated", action=RULE_ACTION.deny)
@@ -248,13 +249,14 @@ class SyncTests(TestCase):
             group="test",
         )
         self.assertEqual(r.request_limit, 1)
-        request = factory.get("/foobar/")
-        r = ratelimit.get_ratelimit(
-            request=request,
-            key="django_fast_iprestrict.apply_iprestrict:require_rule,ignore_pathes",
-            group="test2",
-        )
-        self.assertGreaterEqual(r.request_limit, 1)
+        with self.assertRaises(ratelimit.Disabled) as cm:
+            request = factory.get("/foobar/")
+            ratelimit.get_ratelimit(
+                request=request,
+                key="django_fast_iprestrict.apply_iprestrict:require_rule,ignore_pathes",
+                group="test2",
+            )
+        self.assertGreaterEqual(cm.exception.ratelimit.request_limit, 1)
 
     def test_ratelimit_middleware(self):
         self.client.force_login(self.admin_user)
@@ -281,4 +283,120 @@ class SyncTests(TestCase):
 
 
 class AsyncTests(TestCase):
-    pass
+    async def test_as_ratelimit_fn_two_phased(self):
+        @ratelimit.decorate(
+            key="django_fast_iprestrict.apply_iprestrict:execute_only",
+            group="test",
+        )
+        async def fn(request):
+            return "foo"
+
+        factory = RequestFactory()
+        rule = await Rule.objects.acreate(
+            name="arbitary_name", action=RULE_ACTION.only_ratelimit
+        )
+        await rule.ratelimit_groups.acreate(name="test")
+        await rule.ratelimits.acreate(
+            key="static",
+            rate="1/2m",
+            group="test_as_ratelimit_fn_two_phased",
+            block=True,
+            is_active=True,
+            action=RATELIMIT_ACTION.INCREASE,
+        )
+        for i in range(3):
+            request = factory.get("/foobar/")
+            await fn(request)
+        for i in range(3):
+            request = factory.get("/foobar/")
+            await ratelimit.aget_ratelimit(
+                request=request,
+                key="django_fast_iprestrict.apply_iprestrict:count_only",
+                group="test",
+            )
+        with self.assertRaises(ratelimit.RatelimitExceeded):
+            request = factory.get("/foobar/")
+            await fn(
+                request,
+            )
+
+    async def test_as_ratelimit_fn_plain(self):
+        rule_unrelated = await Rule.objects.acreate(
+            name="unrelated", action=RULE_ACTION.deny
+        )
+        await rule_unrelated.pathes.acreate(path=".*", is_regex=True)
+        factory = RequestFactory()
+        rule = await Rule.objects.acreate(name="arbitary_name", action=RULE_ACTION.deny)
+        await rule.ratelimit_groups.acreate(name="test")
+        request = factory.get("/foobar/")
+        r = await ratelimit.aget_ratelimit(
+            request=request,
+            key="django_fast_iprestrict.apply_iprestrict",
+            group="test",
+        )
+        self.assertGreaterEqual(r.request_limit, 1)
+        rule.action = RULE_ACTION.allow.value
+        await rule.asave()
+        request = factory.get("/foobar/")
+        r = await ratelimit.aget_ratelimit(
+            request=request,
+            key="django_fast_iprestrict.apply_iprestrict",
+            group="test",
+        )
+        self.assertGreaterEqual(r.request_limit, 0)
+        request = factory.get("/foobar/")
+        with self.assertRaises(ratelimit.Disabled) as cm:
+            await ratelimit.aget_ratelimit(
+                request=request,
+                key="django_fast_iprestrict.apply_iprestrict:require_rule",
+                group="test2",
+            )
+        self.assertGreaterEqual(cm.exception.ratelimit.request_limit, 1)
+
+    async def test_as_ratelimit_fn_pathes(self):
+        rule_unrelated = await Rule.objects.acreate(
+            name="unrelated", action=RULE_ACTION.deny
+        )
+        await rule_unrelated.pathes.acreate(path=".*", is_regex=True)
+        factory = RequestFactory()
+        rule = await Rule.objects.acreate(name="arbitary_name", action=RULE_ACTION.deny)
+        await rule.ratelimit_groups.acreate(name="test")
+        await rule.pathes.acreate(path="/foobar/")
+        request = factory.get("/foobar/")
+        r = await ratelimit.aget_ratelimit(
+            request=request,
+            key="django_fast_iprestrict.apply_iprestrict",
+            group="test",
+        )
+        self.assertGreaterEqual(r.request_limit, 1)
+        request = factory.get("/foobar2/")
+        r = await ratelimit.aget_ratelimit(
+            request=request,
+            key="django_fast_iprestrict.apply_iprestrict",
+            group="test",
+        )
+        self.assertEqual(r.request_limit, 0)
+        request = factory.get("/foobar2/")
+        r = await ratelimit.aget_ratelimit(
+            request=request,
+            key="django_fast_iprestrict.apply_iprestrict:ignore_pathes",
+            group="test",
+        )
+        self.assertEqual(r.request_limit, 0)  # is not a catch all because of pathes
+        await rule.networks.acreate(network="0.0.0.0/0")
+        await rule.networks.acreate(network="::/0")
+        request = factory.get("/foobar2/")
+        r = await ratelimit.aget_ratelimit(
+            request=request,
+            key="django_fast_iprestrict.apply_iprestrict:ignore_pathes",
+            group="test",
+        )
+        self.assertEqual(r.request_limit, 1)
+        request = factory.get("/foobar/")
+        with self.assertRaises(ratelimit.Disabled) as cm:
+            await ratelimit.aget_ratelimit(
+                request=request,
+                key="django_fast_iprestrict.apply_iprestrict:require_rule,ignore_pathes",
+                group="test2",
+            )
+        self.assertGreaterEqual(cm.exception.ratelimit.request_limit, 1)

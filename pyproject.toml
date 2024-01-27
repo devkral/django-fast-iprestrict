@@ -20,7 +20,7 @@ classifiers = [
 [tool.poetry.dependencies]
 python = ">=3.9,<4.0"
 django = ">=4.0"
-django-fast-ratelimit = {version = ">=7.3.2", optional=true }
+django-fast-ratelimit = {version = ">=7.3.3", optional=true }
 
 [tool.poetry.extras]
 ratelimit = [
@@ -35,7 +35,7 @@ coverage = "*"
 # installed by default
 [tool.poetry.group.dev.dependencies]
 faker = "*"
-django-fast-ratelimit = ">=7.3.2"
+django-fast-ratelimit = ">=7.3.3"
 django = [
     {version = "<5.0", python = "<3.10"},
     {version = ">=5.0", python = ">=3.10"}

@@ -219,7 +219,7 @@ class RuleManager(models.Manager):
                         pass
         return None, get_default_action(), False, _empty
 
-    aip_match_ip = sync_to_async(match_ip)
+    amatch_ip = sync_to_async(match_ip)
 
     def match_all_ip(
         self,
