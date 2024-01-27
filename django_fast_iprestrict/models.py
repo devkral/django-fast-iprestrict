@@ -448,7 +448,8 @@ class RuleRatelimitGroup(models.Model):
     )
     name = models.CharField(
         max_length=80,
-        help_text="ratelimit group name",
+        verbose_name="ratelimit group name",
+        help_text="matcher for django-fast-ratelimit group",
         validators=[min_length_1],
     )
     is_active = models.BooleanField(blank=True, default=True)

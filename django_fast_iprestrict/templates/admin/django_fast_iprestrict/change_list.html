@@ -1,35 +1,37 @@
 {% extends "admin/change_list.html" %}
 
 {% block pretitle %}
-    <details open="open">
-        <summary>Test rules</summary>
-        <form action="../rule/test_rules/" method="POST" style="margin-top: 8px;">
-            {% csrf_token %}
-            {% for field in test_rules_form.hidden_fields %}
-                {{ field }}
-            {% endfor %}
-            <div style="display: flex; gap: 8px; flex-direction: column; width: fit-content;">
-                {% for field in test_rules_form.visible_fields %}
-                    <div>
-                        {% if field.label %}{{ field.label_tag }}{% endif %}
-                        {{ field.errors }}
-                        {{ field }}
-                        {% if field.help_text %}<div class="helptext"{% if field.auto_id %} id="{{ field.auto_id }}_helptext"{% endif %}>{{ field.help_text|safe }}</div>{% endif %}
-
-                    </div>
-                    <hr/>
+    <form action="../rule/test_rules/" method="POST">
+        <details {% if test_rules_form.has_data %}open="open"{% endif %}>
+            <summary style="cursor: pointer">Test rules settings</summary>
+            <div style="margin-top: 8px;margin-left: 16px;">
+                {% csrf_token %}
+                {% for field in test_rules_form.hidden_fields %}
+                    {{ field }}
                 {% endfor %}
-                <div style="display: flex; flex-direction: row; align-items: center; gap: 8px">
-                    {# input is better styled but there is no way to add an hidden value #}
-                    <input type="submit" value="Test rules"/>
-                    <input type="submit" formaction="../rule/clear_caches/" value="Clear caches"/>
-                    <a href="../rule/simulate_rules/">simulate rules</a>
+                <div style="display: flex; gap: 8px; flex-direction: column; width: fit-content;">
+                    {% for field in test_rules_form.visible_fields %}
+                        <div>
+                            {% if field.label %}{{ field.label_tag }}{% endif %}
+                            {{ field.errors }}
+                            {{ field }}
+                            {% if field.help_text %}<div class="helptext"{% if field.auto_id %} id="{{ field.auto_id }}_helptext"{% endif %}>{{ field.help_text|safe }}</div>{% endif %}
 
+                        </div>
+                        <hr/>
+                    {% endfor %}
                 </div>
             </div>
+        </details>
+        <div style="margin-top: 8px;display: flex; flex-direction: row; align-items: center; gap: 8px">
+            {# input is better styled but there is no way to add an hidden value #}
+            <input type="submit" value="Test rules"/>
+            <input type="submit" formaction="../rule/clear_caches/" value="Clear caches"/>
+            <a href="../rule/simulate_rules/">simulate rules</a>
 
-        </form>
-    </details>
+        </div>
+    </form>
+
     <br />
     {{ block.super }}
 {% endblock %}

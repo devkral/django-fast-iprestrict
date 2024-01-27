@@ -26,7 +26,8 @@ class Migration(migrations.Migration):
                 (
                     "name",
                     models.CharField(
-                        help_text="ratelimit group name",
+                        verbose_name="ratelimit group name",
+                        help_text="matcher for django-fast-ratelimit group",
                         max_length=80,
                         validators=[django.core.validators.MinLengthValidator(1)],
                     ),

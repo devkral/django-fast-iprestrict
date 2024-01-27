@@ -4,6 +4,7 @@ from django.conf import settings
 from django.contrib import admin
 from django.core.cache import caches
 from django.core.exceptions import PermissionDenied
+from django.db import models
 from django.http import (
     HttpRequest,
     HttpResponse,
@@ -31,9 +32,6 @@ except ImportError:
     ratelimit = None
 
 
-# Register your models here.
-
-
 class TestRulesMixin:
     def changelist_view(self, request, extra_context=None):
         default = {
@@ -54,6 +52,11 @@ class TestRulesMixin:
 
 
 class RuleSubMixin(TestRulesMixin):
+    if hasattr(admin, "ShowFacets"):
+        show_facets = admin.ShowFacets.ALWAYS
+    list_filter = ("is_active",)
+    search_fields = ("rule__name",)
+
     def get_urls(self):
         return [
             path("<str:object_id>/change/", self.redirect_change),
@@ -139,8 +142,38 @@ _position_template = """
 """
 
 
+class IsRatelimitMatcherFilter(admin.EmptyFieldListFilter):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.title = "Is ratelimit matcher"
+
+    def choices(self, changelist):
+        # shows wrong amount, so disable
+        add_facets = False
+        # changelist.add_facets
+        facet_counts = self.get_facet_queryset(changelist) if add_facets else None
+        for lookup, title, count_field in (
+            (None, "All", None),
+            ("1", "Normal", "empty__c"),
+            ("0", "Ratelimit matching active", "not_empty__c"),
+        ):
+            if add_facets:
+                if count_field is not None:
+                    count = facet_counts[count_field]
+                    title = f"{title} ({count})"
+            yield {
+                "selected": self.lookup_val == lookup,
+                "query_string": changelist.get_query_string(
+                    {self.lookup_kwarg: lookup}
+                ),
+                "display": title,
+            }
+
+
 @admin.register(Rule)
 class RuleAdmin(TestRulesMixin, admin.ModelAdmin):
+    if hasattr(admin, "ShowFacets"):
+        show_facets = admin.ShowFacets.ALWAYS
     list_display = (
         "position_short",
         "position_buttons",
@@ -148,11 +181,17 @@ class RuleAdmin(TestRulesMixin, admin.ModelAdmin):
         "name",
         "methods",
         "invert_methods",
+        "is_ratelimit_matcher",
     )
     list_display_links = ("position_short",)
     list_editable = ("name", "action", "methods", "invert_methods")
     ordering = ("position",)
     fields = ["name", "action", "methods", "invert_methods"]
+    list_filter = (
+        "action",
+        ("ratelimit_groups", IsRatelimitMatcherFilter),
+    )
+    search_fields = ("name",)
     inlines = [
         RuleNetworkInlineAdmin,
         RuleSourceInlineAdmin,
@@ -160,6 +199,25 @@ class RuleAdmin(TestRulesMixin, admin.ModelAdmin):
         RuleRatelimitInlineAdmin,
         RuleRatelimitGroupInlineAdmin,
     ]
+
+    def get_list_filter(self, request):
+        ret = list(super().get_list_filter(request))
+        if request.GET.get("ratelimit_groups__isempty") != "1":
+            ret.append("ratelimit_groups__name")
+        return ret
+
+    def get_queryset(self, request):
+        return (
+            super()
+            .get_queryset(request)
+            .annotate(
+                has_ratelimit_groups=models.Exists(
+                    RuleRatelimitGroup.objects.filter(
+                        is_active=True, rule_id=models.OuterRef("id")
+                    )
+                )
+            )
+        )
 
     def get_urls(self):
         return [
@@ -368,12 +426,20 @@ class RuleAdmin(TestRulesMixin, admin.ModelAdmin):
     def position_short(self, obj):
         return obj.position
 
-    @admin.display(ordering="position")
+    @admin.display(ordering="position", description="Position")
     def position_buttons(self, obj):
         return format_html(
             _position_template,
             object_id=obj.id,
         )
+
+    @admin.display(
+        ordering="has_ratelimit_groups",
+        description="is ratelimit matcher",
+        boolean=True,
+    )
+    def is_ratelimit_matcher(self, obj):
+        return obj.has_ratelimit_groups
 
 
 @admin.register(RulePath)

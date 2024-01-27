@@ -30,3 +30,7 @@ class TestRulesForm(LinkBackForm):
         required=False,
         help_text="leave empty to not simulate a query from ratelimit apply_fn",
     )
+
+    @property
+    def has_data(self) -> bool:
+        return bool(set(self.changed_data).difference({"link_back"}))
