@@ -18,6 +18,7 @@ if ratelimit:
         request,
         group,
         action=None,
+        rate=None,
         ignore_pathes=False,
         require_rule=False,
         execute_only=False,
@@ -51,7 +52,7 @@ if ratelimit:
                 action=ratelimit.Action.PEEK if execute_only else rdict["action"],
                 group=rdict["group"],
                 key=rdict["key"],
-                rate=rdict["rate"],
+                rate=rdict["rate"] or rate,
             )
             r.decorate_object(
                 request,
@@ -66,6 +67,7 @@ if ratelimit:
         request,
         group,
         action=None,
+        rate=None,
         ignore_pathes=False,
         require_rule=False,
         execute_only=False,
@@ -99,7 +101,7 @@ if ratelimit:
                 action=ratelimit.Action.PEEK if execute_only else rdict["action"],
                 group=rdict["group"],
                 key=rdict["key"],
-                rate=rdict["rate"],
+                rate=rdict["rate"] or rate,
             )
             await r.adecorate_object(
                 request,
@@ -112,15 +114,15 @@ if ratelimit:
         return 0
 
     @singledispatch
-    def apply_iprestrict(request, group, action=None, **kwargs):
+    def apply_iprestrict(request, group, action=None, rate=None, **kwargs):
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             loop = None
         if loop:
-            return _aapply_iprestrict(request, group, action, **kwargs)
+            return _aapply_iprestrict(request, group, action, rate, **kwargs)
         else:
-            return _apply_iprestrict(request, group, action, **kwargs)
+            return _apply_iprestrict(request, group, action, rate, **kwargs)
 
     @apply_iprestrict.register(str)
     def _(arg: str = "", *args):

@@ -71,6 +71,7 @@ r = ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict", group
 
 # since django-fast-ratelimit 7.3, rate is not required anymore for older versions add stub rate
 # Note: stub rates like 0/s will still raise Disabled
+# Note: you must specify a default rate when having in iprestrict ratelimitrule without a rate, otherwise it crashes
 r = ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict", groups="groupname", rate="1/s")
 
 # or when only checking ips and not pathes (when pathes are available)
@@ -100,6 +101,8 @@ The following arguments are valid:
 -   `count_only`: don't apply wait and block, when rule exists return only 0 (allowed), update the counter only and decorate request, for two-phased execution models
 
 Note: when the request is already annotated with a ratelimit with the same decorate_name both instances are merged
+
+Note: you can provide a rate and leave the field rate in iprestrict ratelimit unspecified for using the provided rate
 
 #### two phased execution model
 

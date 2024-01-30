@@ -90,6 +90,8 @@ _rate = re.compile(r"(\d+)/(\d+)?([smhdw])?")
 
 
 def validate_rate(value):
+    if not value:
+        return
     matched = _rate.match(value)
     if not matched:
         raise ValidationError("Invalid rate", code="invalid", params={"value": value})

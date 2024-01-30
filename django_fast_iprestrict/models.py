@@ -431,11 +431,22 @@ class RuleRatelimit(ActivatableAndManageable):
         choices=RATELIMIT_ACTION.choices,
         default=RATELIMIT_ACTION.INCREASE,
     )
-    rate = models.CharField(max_length=10, validators=[validate_rate])
+    rate = models.CharField(
+        max_length=10,
+        validators=[validate_rate],
+        help_text="Leave empty to use the default rate (only valid for ratelimit matching rules)",
+    )
     block = models.BooleanField(blank=True, default=False)
     wait = models.BooleanField(blank=True, default=False)
 
     objects = RuleRatelimitManager()
+
+    def clean(self):
+        super().clean()
+        if not self.rate and not self.rule.ratelimit_groups.exists():
+            raise ValidationError(
+                "Cannot create ratelimit without rate except for ratelimit matching rules"
+            )
 
 
 class RuleRatelimitGroupManager(models.Manager):
