@@ -47,6 +47,13 @@ def get_default_position():
     return Rule.objects.aggregate(Max("position", default=0))["position__max"] + 1
 
 
+class Activatable(models.Model):
+    is_active = models.BooleanField(blank=True, default=True)
+
+    class Meta:
+        abstract = True
+
+
 class RuleManager(models.Manager):
     _next_rules_updates = time.monotonic() + _update_interval_secs
 
@@ -397,7 +404,7 @@ class RuleRatelimitManager(models.Manager):
     pass
 
 
-class RuleRatelimit(models.Model):
+class RuleRatelimit(Activatable):
     rule = models.ForeignKey(Rule, related_name="ratelimits", on_delete=models.CASCADE)
     key = models.CharField(
         max_length=200,
@@ -414,7 +421,6 @@ class RuleRatelimit(models.Model):
     rate = models.CharField(max_length=10, validators=[validate_rate])
     block = models.BooleanField(blank=True, default=False)
     wait = models.BooleanField(blank=True, default=False)
-    is_active = models.BooleanField(blank=True, default=True)
 
     objects = RuleRatelimitManager()
 
@@ -442,7 +448,7 @@ class RuleRatelimitGroupManager(models.Manager):
     aname_matchers = sync_to_async(name_matchers)
 
 
-class RuleRatelimitGroup(models.Model):
+class RuleRatelimitGroup(Activatable):
     rule = models.ForeignKey(
         Rule, related_name="ratelimit_groups", on_delete=models.CASCADE
     )
@@ -452,7 +458,6 @@ class RuleRatelimitGroup(models.Model):
         help_text="matcher for django-fast-ratelimit group",
         validators=[min_length_1],
     )
-    is_active = models.BooleanField(blank=True, default=True)
 
     objects = RuleRatelimitGroupManager()
 
@@ -464,10 +469,9 @@ class RuleRatelimitGroup(models.Model):
         ]
 
 
-class RuleNetwork(models.Model):
+class RuleNetwork(Activatable):
     rule = models.ForeignKey(Rule, related_name="networks", on_delete=models.CASCADE)
     network = models.CharField(max_length=50, validators=[validate_network])
-    is_active = models.BooleanField(blank=True, default=True)
 
     def __str__(self):
         return self.network
@@ -592,7 +596,7 @@ class RuleSourceManager(models.Manager):
         return self.generator_fn
 
 
-class RuleSource(models.Model):
+class RuleSource(Activatable):
     rule = models.ForeignKey(Rule, related_name="sources", on_delete=models.CASCADE)
     generator_fn = models.CharField(
         max_length=200,
@@ -601,8 +605,6 @@ class RuleSource(models.Model):
         ],
     )
     interval = models.PositiveIntegerField(blank=True, default=get_default_interval)
-    is_active = models.BooleanField(blank=True, default=True)
-
     objects = RuleSourceManager()
 
     def get_cache_key(self):
@@ -711,11 +713,10 @@ class RulePathManager(models.Manager):
     amatch_ip_and_path = sync_to_async(match_ip_and_path)
 
 
-class RulePath(models.Model):
+class RulePath(Activatable):
     rule = models.ForeignKey(Rule, related_name="pathes", on_delete=models.CASCADE)
     path = models.TextField(max_length=4096)
     is_regex = models.BooleanField(default=False, blank=True)
-    is_active = models.BooleanField(blank=True, default=True)
 
     objects = RulePathManager()
 
