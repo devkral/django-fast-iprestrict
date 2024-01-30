@@ -34,3 +34,13 @@ class TestRulesForm(LinkBackForm):
     @property
     def has_data(self) -> bool:
         return bool(set(self.changed_data).difference({"link_back"}))
+
+
+class ManagedForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.instance.managed_fields:
+            field = self.fields.get(field)
+            if field:
+                field.disabled = True
+                field.widget.attrs["title"] = "managed"

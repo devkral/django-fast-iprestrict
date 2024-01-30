@@ -47,7 +47,20 @@ def get_default_position():
     return Rule.objects.aggregate(Max("position", default=0))["position__max"] + 1
 
 
-class Activatable(models.Model):
+class Manageable(models.Model):
+    managed_fields = models.JSONField(blank=True, default=list, editable=False)
+
+    class Meta:
+        abstract = True
+
+    def clean(self):
+        super().clean()
+        valid_names = {i.name for i in self._meta.get_fields()}
+        valid_names.discard("position")
+        self.managed_fields = list(valid_names.intersection(self.managed_fields))
+
+
+class ActivatableAndManageable(Manageable):
     is_active = models.BooleanField(blank=True, default=True)
 
     class Meta:
@@ -323,7 +336,7 @@ class RuleManager(models.Manager):
             ).update(position=models.F("position") + models.F("position_mod"))
 
 
-class Rule(models.Model):
+class Rule(Manageable):
     _trigger_cleanup = True
     position = models.PositiveIntegerField(blank=True, default=get_default_position)
     name = models.CharField(max_length=50, unique=True)
@@ -404,7 +417,7 @@ class RuleRatelimitManager(models.Manager):
     pass
 
 
-class RuleRatelimit(Activatable):
+class RuleRatelimit(ActivatableAndManageable):
     rule = models.ForeignKey(Rule, related_name="ratelimits", on_delete=models.CASCADE)
     key = models.CharField(
         max_length=200,
@@ -448,7 +461,7 @@ class RuleRatelimitGroupManager(models.Manager):
     aname_matchers = sync_to_async(name_matchers)
 
 
-class RuleRatelimitGroup(Activatable):
+class RuleRatelimitGroup(ActivatableAndManageable):
     rule = models.ForeignKey(
         Rule, related_name="ratelimit_groups", on_delete=models.CASCADE
     )
@@ -469,7 +482,7 @@ class RuleRatelimitGroup(Activatable):
         ]
 
 
-class RuleNetwork(Activatable):
+class RuleNetwork(ActivatableAndManageable):
     rule = models.ForeignKey(Rule, related_name="networks", on_delete=models.CASCADE)
     network = models.CharField(max_length=50, validators=[validate_network])
 
@@ -596,7 +609,7 @@ class RuleSourceManager(models.Manager):
         return self.generator_fn
 
 
-class RuleSource(Activatable):
+class RuleSource(ActivatableAndManageable):
     rule = models.ForeignKey(Rule, related_name="sources", on_delete=models.CASCADE)
     generator_fn = models.CharField(
         max_length=200,
@@ -713,7 +726,7 @@ class RulePathManager(models.Manager):
     amatch_ip_and_path = sync_to_async(match_ip_and_path)
 
 
-class RulePath(Activatable):
+class RulePath(ActivatableAndManageable):
     rule = models.ForeignKey(Rule, related_name="pathes", on_delete=models.CASCADE)
     path = models.TextField(max_length=4096)
     is_regex = models.BooleanField(default=False, blank=True)

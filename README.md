@@ -164,6 +164,15 @@ Note: the matching methods have much more arguments. See in source for details
 You might want to ignore the generic argument of match_ip and match_all_ip, it is dangerous as it ignores disabled rules
 and can easily lead to lock outs
 
+
+#### thirdparty integration (really deep lowlevel)
+
+All of the models have managed_fields attribute. It is a list and only a list is valid. You can add field names you want to lockdown.
+This cannot be overwritten by GUI. It is for the integration in thirdparty software, so nobody can do bad things or even delete.
+
+Note: you should either call clean or ensure that all list entries are field names
+
+
 ### Sources (GEOIP)
 
 For GEOIP or other stuff sources can be used.
@@ -175,6 +184,7 @@ Restriction: "\_" prefixed functions are not allowed
 They are referenced in admin with their path, e.g.:
 
 `tests.test_basic.test_iprestrict_gen` (=also working example in dev environment with test_settings)
+
 
 ### Ratelimits
 

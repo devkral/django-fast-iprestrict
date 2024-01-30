@@ -15,7 +15,7 @@ from django.template.response import TemplateResponse
 from django.urls import path
 from django.utils.html import format_html
 
-from .forms import LinkBackForm, TestRulesForm
+from .forms import LinkBackForm, ManagedForm, TestRulesForm
 from .models import (
     Rule,
     RuleNetwork,
@@ -30,6 +30,37 @@ try:
     import django_fast_ratelimit as ratelimit
 except ImportError:
     ratelimit = None
+
+
+class ManageableMixin:
+    def get_readonly_fields(self, request, obj=None):
+        readonly_fields = list(super().get_readonly_fields(request, obj))
+        if obj and isinstance(obj, self.model):
+            readonly_fields.extend(obj.managed_fields)
+        return readonly_fields
+
+    def has_delete_permission(self, request, obj=None):
+        if not super().has_delete_permission(request, obj):
+            return False
+        if not obj:
+            return True
+        if isinstance(obj, self.model):
+            # can only delete without managed fields
+            return not bool(obj.managed_fields)
+        opts = self.opts
+        parent_field = opts.get_field("rule")
+        return parent_field.remote_field.name not in obj.managed_fields
+
+    @admin.display(
+        description="managed",
+        boolean=True,
+    )
+    def is_managed(self, obj):
+        return bool(obj.managed_fields)
+
+    @admin.display(description="managed fields")
+    def managed_fields_display(self, obj):
+        return ", ".join(obj.managed_fields)
 
 
 class TestRulesMixin:
@@ -51,7 +82,7 @@ class TestRulesMixin:
         )
 
 
-class RuleSubMixin(TestRulesMixin):
+class RuleSubMixin(TestRulesMixin, ManageableMixin):
     if hasattr(admin, "ShowFacets"):
         show_facets = admin.ShowFacets.ALWAYS
     list_filter = ("is_active",)
@@ -74,30 +105,60 @@ class RuleSubMixin(TestRulesMixin):
         return False
 
 
-class ExtraOnlyOnInitialMixin:
+class SubRuleInlineMixin(ManageableMixin):
     extra = 1
+    fk_name = "rule"
+
+    def get_readonly_fields(self, request, obj=None):
+        readonly_fields = list(super().get_readonly_fields(request, obj))
+        readonly_fields.append("is_managed")
+        return readonly_fields
 
     def get_extra(self, request, obj=None, **kwargs):
         return self.extra if not obj else 0
 
+    def has_add_permission(self, request, obj=None):
+        if not super().has_add_permission(request, obj):
+            return False
+        if not obj:
+            return True
+        if isinstance(obj, self.model):
+            return True
+        # check parent model
+        opts = self.opts
+        parent_field = opts.get_field("rule")
+        return parent_field.remote_field.name not in obj.managed_fields
 
-class RulePathInlineAdmin(ExtraOnlyOnInitialMixin, admin.StackedInline):
+    def has_change_permission(self, request, obj=None):
+        if not super().has_change_permission(request, obj):
+            return False
+        if not obj:
+            return True
+        if isinstance(obj, self.model):
+            return True
+        # check parent model
+        opts = self.opts
+        parent_field = opts.get_field("rule")
+        return parent_field.remote_field.name not in obj.managed_fields
+
+
+class RulePathInlineAdmin(SubRuleInlineMixin, admin.StackedInline):
     model = RulePath
 
 
-class RuleRatelimitInlineAdmin(ExtraOnlyOnInitialMixin, admin.StackedInline):
+class RuleRatelimitInlineAdmin(SubRuleInlineMixin, admin.StackedInline):
     model = RuleRatelimit
 
 
-class RuleNetworkInlineAdmin(ExtraOnlyOnInitialMixin, admin.TabularInline):
+class RuleNetworkInlineAdmin(SubRuleInlineMixin, admin.TabularInline):
     model = RuleNetwork
 
 
-class RuleSourceInlineAdmin(ExtraOnlyOnInitialMixin, admin.TabularInline):
+class RuleSourceInlineAdmin(SubRuleInlineMixin, admin.TabularInline):
     model = RuleSource
 
 
-class RuleRatelimitGroupInlineAdmin(ExtraOnlyOnInitialMixin, admin.TabularInline):
+class RuleRatelimitGroupInlineAdmin(SubRuleInlineMixin, admin.TabularInline):
     model = RuleRatelimitGroup
 
 
@@ -171,7 +232,7 @@ class IsRatelimitMatcherFilter(admin.EmptyFieldListFilter):
 
 
 @admin.register(Rule)
-class RuleAdmin(TestRulesMixin, admin.ModelAdmin):
+class RuleAdmin(TestRulesMixin, ManageableMixin, admin.ModelAdmin):
     if hasattr(admin, "ShowFacets"):
         show_facets = admin.ShowFacets.ALWAYS
     list_display = (
@@ -182,11 +243,12 @@ class RuleAdmin(TestRulesMixin, admin.ModelAdmin):
         "methods",
         "invert_methods",
         "is_ratelimit_matcher",
+        "is_managed",
     )
     list_display_links = ("position_short",)
     list_editable = ("name", "action", "methods", "invert_methods")
     ordering = ("position",)
-    fields = ["name", "action", "methods", "invert_methods"]
+    fields = ["name", "managed_fields_display", "action", "methods", "invert_methods"]
     list_filter = (
         "action",
         ("ratelimit_groups", IsRatelimitMatcherFilter),
@@ -200,11 +262,19 @@ class RuleAdmin(TestRulesMixin, admin.ModelAdmin):
         RuleRatelimitGroupInlineAdmin,
     ]
 
+    def get_readonly_fields(self, request, obj=None):
+        readonly_fields = list(super().get_readonly_fields(request, obj))
+        readonly_fields.append("managed_fields_display")
+        return readonly_fields
+
     def get_list_filter(self, request):
         ret = list(super().get_list_filter(request))
         if request.GET.get("ratelimit_groups__isempty") != "1":
             ret.append("ratelimit_groups__name")
         return ret
+
+    def get_changelist_form(self, request, **kwargs):
+        return super().get_changelist_form(request, form=ManagedForm, **kwargs)
 
     def get_queryset(self, request):
         return (
@@ -215,7 +285,7 @@ class RuleAdmin(TestRulesMixin, admin.ModelAdmin):
                     RuleRatelimitGroup.objects.filter(
                         is_active=True, rule_id=models.OuterRef("id")
                     )
-                )
+                ),
             )
         )
 
@@ -444,23 +514,23 @@ class RuleAdmin(TestRulesMixin, admin.ModelAdmin):
 
 @admin.register(RulePath)
 class RulePathAdmin(RuleSubMixin, admin.ModelAdmin):
-    list_display = ("rule", "path", "is_regex", "is_active")
+    list_display = ("rule", "path", "is_regex", "is_active", "is_managed")
     ordering = ("rule", "id")
 
 
 @admin.register(RuleNetwork)
 class RuleNetworkAdmin(RuleSubMixin, admin.ModelAdmin):
-    list_display = ("rule", "network", "is_active")
+    list_display = ("rule", "network", "is_active", "is_managed")
     ordering = ("rule", "id")
 
 
 @admin.register(RuleRatelimitGroup)
 class RuleRatelimitGroupAdmin(RuleSubMixin, admin.ModelAdmin):
-    list_display = ("rule", "name", "is_active")
+    list_display = ("rule", "name", "is_active", "is_managed")
     ordering = ("rule", "name")
 
 
 @admin.register(RuleSource)
 class RuleSourceAdmin(RuleSubMixin, admin.ModelAdmin):
-    list_display = ("rule", "generator_fn", "is_active")
+    list_display = ("rule", "generator_fn", "is_active", "is_managed")
     ordering = ("rule", "id")
