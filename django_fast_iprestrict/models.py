@@ -434,19 +434,15 @@ class RuleRatelimit(ActivatableAndManageable):
     rate = models.CharField(
         max_length=10,
         validators=[validate_rate],
-        help_text="Leave empty to use the default rate (only valid for ratelimit matching rules)",
+        help_text=(
+            'Set to "inherit" to use the provided rate (when set to "inherit" '
+            "ratelimit is ignored in middleware and without a provided rate)"
+        ),
     )
     block = models.BooleanField(blank=True, default=False)
     wait = models.BooleanField(blank=True, default=False)
 
     objects = RuleRatelimitManager()
-
-    def clean(self):
-        super().clean()
-        if not self.rate and not self.rule.ratelimit_groups.exists():
-            raise ValidationError(
-                "Cannot create ratelimit without rate except for ratelimit matching rules"
-            )
 
 
 class RuleRatelimitGroupManager(models.Manager):

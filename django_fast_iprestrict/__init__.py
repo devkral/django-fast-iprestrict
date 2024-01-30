@@ -47,12 +47,18 @@ if ratelimit:
             )
 
         for rdict in ratelimits:
+            if rdict["rate"] == "inherit":
+                r_rate = rate
+                if not r_rate:
+                    continue
+            else:
+                r_rate = rdict["rate"]
             r = ratelimit.get_ratelimit(
                 request=request,
                 action=ratelimit.Action.PEEK if execute_only else rdict["action"],
                 group=rdict["group"],
                 key=rdict["key"],
-                rate=rdict["rate"] or rate,
+                rate=r_rate,
             )
             r.decorate_object(
                 request,
@@ -96,12 +102,18 @@ if ratelimit:
                 ratelimit=ratelimit.Ratelimit(group=group, request_limit=1, end=0),
             )
         for rdict in ratelimits:
+            if rdict["rate"] == "inherit":
+                r_rate = rate
+                if not r_rate:
+                    continue
+            else:
+                r_rate = rdict["rate"]
             r = await ratelimit.aget_ratelimit(
                 request=request,
                 action=ratelimit.Action.PEEK if execute_only else rdict["action"],
                 group=rdict["group"],
                 key=rdict["key"],
-                rate=rdict["rate"] or rate,
+                rate=r_rate,
             )
             await r.adecorate_object(
                 request,

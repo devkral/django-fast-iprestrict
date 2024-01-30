@@ -57,6 +57,15 @@ the lowest position to the highest position. State disabled rules are skipped
 
 Note: ipv4 and ipv6 rules are not interoperable. If the network does not match they are skipped like if they are in state "disabled".
 
+
+#### ratelimits
+
+ratelimits can be specified or a rule can be made to a ratelimit matcher (called programmatically via django-fast-ratelimit)
+
+In the last case it is possible to provide the rate "inherit" for using the rate specified in the django-fast-ratelimit call.
+
+If no rate was passed, ratelimits with rate "inherit" will be ignored
+
 ### programmatically
 
 The rule names can be used for the django-fast-ratelimit adapter if RuleRatelimitGroups are defined and active. When some are defined the rule isn't used anymore in normal matching but only in apply_iprestrict.
@@ -71,7 +80,7 @@ r = ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict", group
 
 # since django-fast-ratelimit 7.3, rate is not required anymore for older versions add stub rate
 # Note: stub rates like 0/s will still raise Disabled
-# Note: you must specify a default rate when having in iprestrict ratelimitrule without a rate, otherwise it crashes
+# Note: 1/s is used as the default rate for django-fast-ratelimit 8.0.0. This way rates can be passed to iprestrict
 r = ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict", groups="groupname", rate="1/s")
 
 # or when only checking ips and not pathes (when pathes are available)
@@ -102,7 +111,7 @@ The following arguments are valid:
 
 Note: when the request is already annotated with a ratelimit with the same decorate_name both instances are merged
 
-Note: you can provide a rate and leave the field rate in iprestrict ratelimit unspecified for using the provided rate
+Note: you can provide a rate and set the field rate in iprestrict ratelimit to "inherit" for using the provided rate, this works only when a rate is specified
 
 #### two phased execution model
 

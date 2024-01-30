@@ -23,7 +23,7 @@ def fast_iprestrict(get_response):
             )[1:]
             if ratelimit:
                 for rdict in ratelimits:
-                    if not rdict["rate"]:
+                    if rdict["rate"] == "inherit":
                         continue
                     r = await ratelimit.aget_ratelimit(
                         request=request,
@@ -52,7 +52,7 @@ def fast_iprestrict(get_response):
 
             if ratelimit:
                 for rdict in ratelimits:
-                    if not rdict["rate"]:
+                    if rdict["rate"] == "inherit":
                         continue
                     r = ratelimit.get_ratelimit(
                         request=request,
