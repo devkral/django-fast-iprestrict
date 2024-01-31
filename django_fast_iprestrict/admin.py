@@ -451,7 +451,7 @@ class RuleAdmin(TestRulesMixin, ManageableMixin, admin.ModelAdmin):
                 )[0]
                 self.message_user(
                     request,
-                    f"Parameters: ip: {parse_ipaddress(test_ip)}, method: {test_method or '-'}",
+                    f"Parameters: ip: {parse_ipaddress(test_ip)}, method: {test_method or '-'}, ratelimit group: {test_ratelimit_group or '-'}",
                     level=INFO,
                 )
             if rule_id:

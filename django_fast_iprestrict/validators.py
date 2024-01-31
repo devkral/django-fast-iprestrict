@@ -36,7 +36,7 @@ def validate_regex(value):
         raise ValidationError("Invalid regex.", code="invalid", params={"value": value})
 
 
-validate_path = RegexValidator(r"^/[^?#]+/?$")
+validate_path = RegexValidator(r"^/[^?#]*/?$")
 
 min_length_1 = MinLengthValidator(1)
 
