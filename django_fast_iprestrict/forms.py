@@ -1,5 +1,6 @@
 from django import forms
 from django.core import validators
+from django.forms.formsets import DELETION_FIELD_NAME
 
 from .validators import validate_methods, validate_path
 
@@ -44,3 +45,12 @@ class ManagedForm(forms.ModelForm):
             if field:
                 field.disabled = True
                 field.widget.attrs["title"] = "managed"
+
+    def clean(self):
+        ret = super().clean()
+        if self.instance.managed_fields:
+            # MUST pop deletion field for preventing deletion
+            if ret.pop(DELETION_FIELD_NAME, False):
+                raise forms.ValidationError("Cannot delete managed form")
+
+        return ret

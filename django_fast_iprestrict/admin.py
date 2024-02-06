@@ -33,6 +33,8 @@ except ImportError:
 
 
 class ManageableMixin:
+    form = ManagedForm
+
     def get_readonly_fields(self, request, obj=None):
         readonly_fields = list(super().get_readonly_fields(request, obj))
         if obj and isinstance(obj, self.model):
