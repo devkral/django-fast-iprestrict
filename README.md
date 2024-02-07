@@ -184,7 +184,9 @@ This cannot be overwritten by GUI. It is for the integration in thirdparty softw
 Note: you should either call clean or ensure that all list entries are field names
 
 Note: when using one of "ratelimits", "ratelimit_groups", "networks", "pathes", "sources" (fields to attached inline models)
-only the creation and deletion is blocked. To lock the inline models further down, add fields to managed_fields
+only the creation and deletion is blocked. To lock the inline models further down, add fields to managed_fields.
+
+There is one field which cannot be locked: "position"
 
 ### Sources (GEOIP)
 
