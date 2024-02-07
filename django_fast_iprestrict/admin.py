@@ -36,7 +36,7 @@ except ImportError:
 class IsRatelimitMatcherFilter(admin.EmptyFieldListFilter):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.title = "Is ratelimit matcher"
+        self.title = "is ratelimit matcher"
 
     def choices(self, changelist):
         # shows wrong amount, so disable
@@ -62,7 +62,7 @@ class IsRatelimitMatcherFilter(admin.EmptyFieldListFilter):
 
 
 class IsManagedFilter(admin.SimpleListFilter):
-    title = "Is managed"
+    title = "is managed"
     parameter_name = "is_managed"
 
     def lookups(self, request, model_admin):
@@ -136,9 +136,11 @@ class TestRulesMixin:
 class RuleSubMixin(TestRulesMixin, ManageableMixin):
     if hasattr(admin, "ShowFacets"):
         show_facets = admin.ShowFacets.ALWAYS
-    list_filter = ("is_active",)
     search_fields = ("rule__name",)
-    list_filter = (IsManagedFilter,)
+    list_filter = (
+        "is_active",
+        IsManagedFilter,
+    )
 
     def get_changelist_form(self, request, **kwargs):
         return super().get_changelist_form(request, form=ManagedForm, **kwargs)
@@ -542,16 +544,19 @@ class RuleRatelimitAdmin(RuleSubMixin, admin.ModelAdmin):
         "group",
         "key",
         "rate",
+        "action",
         "block",
         "wait",
         "is_active",
         "is_managed",
     )
     ordering = ("rule", "group")
+    list_filter = (*RuleSubMixin.list_filter, "action")
     list_editable = (
         "group",
         "key",
         "rate",
+        "action",
         "block",
         "wait",
         "is_active",
