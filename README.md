@@ -264,5 +264,6 @@ poetry run ./manage.py runserver
 
 # TODO
 
--   filter for ratelimit enabled rules and not ratelimit enable rules
+-   extend lockout check for ratelimits (e.g. disabled is raised)
+-   lockout check for RulePath and RuleNetwork change lists, so list_editable can be enabled
 -   localization?

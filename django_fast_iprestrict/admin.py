@@ -5,6 +5,7 @@ from django.contrib import admin
 from django.core.cache import caches
 from django.core.exceptions import PermissionDenied
 from django.db import models
+from django.db.models.functions import Cast
 from django.http import (
     HttpRequest,
     HttpResponse,
@@ -30,6 +31,54 @@ try:
     import django_fast_ratelimit as ratelimit
 except ImportError:
     ratelimit = None
+
+
+class IsRatelimitMatcherFilter(admin.EmptyFieldListFilter):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.title = "Is ratelimit matcher"
+
+    def choices(self, changelist):
+        # shows wrong amount, so disable
+        add_facets = False
+        # changelist.add_facets
+        facet_counts = self.get_facet_queryset(changelist) if add_facets else None
+        for lookup, title, count_field in (
+            (None, "All", None),
+            ("1", "Normal", "empty__c"),
+            ("0", "Ratelimit matching active", "not_empty__c"),
+        ):
+            if add_facets:
+                if count_field is not None:
+                    count = facet_counts[count_field]
+                    title = f"{title} ({count})"
+            yield {
+                "selected": self.lookup_val == lookup,
+                "query_string": changelist.get_query_string(
+                    {self.lookup_kwarg: lookup}
+                ),
+                "display": title,
+            }
+
+
+class IsManagedFilter(admin.SimpleListFilter):
+    title = "Is managed"
+    parameter_name = "is_managed"
+
+    def lookups(self, request, model_admin):
+        return [("0", "Unmanaged"), ("1", "Managed")]
+
+    def queryset(self, request, queryset):
+        value = self.value()
+        if value == "0":
+            return queryset.alias(
+                managed_fields_as_str=Cast("managed_fields", models.TextField())
+            ).filter(managed_fields_as_str="[]")
+        elif value == "1":
+            return queryset.alias(
+                managed_fields_as_str=Cast("managed_fields", models.TextField())
+            ).exclude(managed_fields_as_str="[]")
+        return queryset
 
 
 class ManageableMixin:
@@ -89,6 +138,10 @@ class RuleSubMixin(TestRulesMixin, ManageableMixin):
         show_facets = admin.ShowFacets.ALWAYS
     list_filter = ("is_active",)
     search_fields = ("rule__name",)
+    list_filter = (IsManagedFilter,)
+
+    def get_changelist_form(self, request, **kwargs):
+        return super().get_changelist_form(request, form=ManagedForm, **kwargs)
 
     def get_urls(self):
         return [
@@ -101,9 +154,6 @@ class RuleSubMixin(TestRulesMixin, ManageableMixin):
         return HttpResponseRedirect(f"../../../rule/{rulep.rule_id}/change/")
 
     def has_add_permission(self, request):
-        return False
-
-    def has_change_permission(self, request, obj=None):
         return False
 
 
@@ -193,34 +243,6 @@ _position_template = """
 """
 
 
-class IsRatelimitMatcherFilter(admin.EmptyFieldListFilter):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.title = "Is ratelimit matcher"
-
-    def choices(self, changelist):
-        # shows wrong amount, so disable
-        add_facets = False
-        # changelist.add_facets
-        facet_counts = self.get_facet_queryset(changelist) if add_facets else None
-        for lookup, title, count_field in (
-            (None, "All", None),
-            ("1", "Normal", "empty__c"),
-            ("0", "Ratelimit matching active", "not_empty__c"),
-        ):
-            if add_facets:
-                if count_field is not None:
-                    count = facet_counts[count_field]
-                    title = f"{title} ({count})"
-            yield {
-                "selected": self.lookup_val == lookup,
-                "query_string": changelist.get_query_string(
-                    {self.lookup_kwarg: lookup}
-                ),
-                "display": title,
-            }
-
-
 @admin.register(Rule)
 class RuleAdmin(TestRulesMixin, ManageableMixin, admin.ModelAdmin):
     if hasattr(admin, "ShowFacets"):
@@ -241,9 +263,10 @@ class RuleAdmin(TestRulesMixin, ManageableMixin, admin.ModelAdmin):
     fields = ["name", "managed_fields_display", "action", "methods", "invert_methods"]
     list_filter = (
         "action",
+        IsManagedFilter,
         ("ratelimit_groups", IsRatelimitMatcherFilter),
     )
-    search_fields = ("name",)
+    search_fields = ("name", "ratelimit_groups__name")
     inlines = [
         RuleNetworkInlineAdmin,
         RuleSourceInlineAdmin,
@@ -256,12 +279,6 @@ class RuleAdmin(TestRulesMixin, ManageableMixin, admin.ModelAdmin):
         readonly_fields = list(super().get_readonly_fields(request, obj))
         readonly_fields.append("managed_fields_display")
         return readonly_fields
-
-    def get_list_filter(self, request):
-        ret = list(super().get_list_filter(request))
-        if request.GET.get("ratelimit_groups__isempty") != "1":
-            ret.append("ratelimit_groups__name")
-        return ret
 
     def get_changelist_form(self, request, **kwargs):
         return super().get_changelist_form(request, form=ManagedForm, **kwargs)
@@ -505,22 +522,54 @@ class RuleAdmin(TestRulesMixin, ManageableMixin, admin.ModelAdmin):
 @admin.register(RulePath)
 class RulePathAdmin(RuleSubMixin, admin.ModelAdmin):
     list_display = ("rule", "path", "is_regex", "is_active", "is_managed")
-    ordering = ("rule", "id")
+    ordering = ("rule", "path")
+    search_fields = ("path", "rule__name")
+    # cannot enable list editable yet, needs lockout check
 
 
 @admin.register(RuleNetwork)
 class RuleNetworkAdmin(RuleSubMixin, admin.ModelAdmin):
     list_display = ("rule", "network", "is_active", "is_managed")
-    ordering = ("rule", "id")
+    ordering = ("rule", "network")
+    search_fields = ("network", "rule__name")
+    # cannot enable list editable yet, needs lockout check
+
+
+@admin.register(RuleRatelimit)
+class RuleRatelimitAdmin(RuleSubMixin, admin.ModelAdmin):
+    list_display = (
+        "rule",
+        "group",
+        "key",
+        "rate",
+        "block",
+        "wait",
+        "is_active",
+        "is_managed",
+    )
+    ordering = ("rule", "group")
+    list_editable = (
+        "group",
+        "key",
+        "rate",
+        "block",
+        "wait",
+        "is_active",
+    )
+    search_fields = ("group", "key", "rule__name")
 
 
 @admin.register(RuleRatelimitGroup)
 class RuleRatelimitGroupAdmin(RuleSubMixin, admin.ModelAdmin):
     list_display = ("rule", "name", "is_active", "is_managed")
     ordering = ("rule", "name")
+    list_editable = ("name", "is_active")
+    search_fields = ("name", "rule__name")
 
 
 @admin.register(RuleSource)
 class RuleSourceAdmin(RuleSubMixin, admin.ModelAdmin):
-    list_display = ("rule", "generator_fn", "is_active", "is_managed")
-    ordering = ("rule", "id")
+    list_display = ("rule", "generator_fn", "interval", "is_active", "is_managed")
+    ordering = ("rule", "generator_fn")
+    list_editable = ("generator_fn", "interval", "is_active")
+    search_fields = ("generator_fn", "rule__name")
