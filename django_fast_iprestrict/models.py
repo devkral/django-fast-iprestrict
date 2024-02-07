@@ -484,7 +484,7 @@ class RuleRatelimitGroup(ActivatableAndManageable):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["rule_id", "name"], name="rule_ratelimit_groups_unique"
+                fields=["rule", "name"], name="rule_ratelimit_groups_unique"
             )
         ]
 

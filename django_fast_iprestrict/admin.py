@@ -141,6 +141,10 @@ class RuleSubMixin(TestRulesMixin, ManageableMixin):
         IsManagedFilter,
     )
 
+    @admin.display(ordering="rule__name", description="Rule")
+    def rule_display(self, obj):
+        return obj.rule.name
+
     def get_changelist_form(self, request, **kwargs):
         return super().get_changelist_form(request, form=ManagedForm, **kwargs)
 
@@ -522,16 +526,16 @@ class RuleAdmin(TestRulesMixin, ManageableMixin, admin.ModelAdmin):
 
 @admin.register(RulePath)
 class RulePathAdmin(RuleSubMixin, admin.ModelAdmin):
-    list_display = ("rule", "path", "is_regex", "is_active", "is_managed")
-    ordering = ("rule", "path")
+    list_display = ("rule_display", "path", "is_regex", "is_active", "is_managed")
+    ordering = ("rule__name", "path")
     search_fields = ("path", "rule__name")
     # cannot enable list editable yet, needs lockout check
 
 
 @admin.register(RuleNetwork)
 class RuleNetworkAdmin(RuleSubMixin, admin.ModelAdmin):
-    list_display = ("rule", "network", "is_active", "is_managed")
-    ordering = ("rule", "network")
+    list_display = ("rule_display", "network", "is_active", "is_managed")
+    ordering = ("rule__name", "network")
     search_fields = ("network", "rule__name")
     # cannot enable list editable yet, needs lockout check
 
@@ -539,7 +543,7 @@ class RuleNetworkAdmin(RuleSubMixin, admin.ModelAdmin):
 @admin.register(RuleRatelimit)
 class RuleRatelimitAdmin(RuleSubMixin, admin.ModelAdmin):
     list_display = (
-        "rule",
+        "rule_display",
         "group",
         "key",
         "rate",
@@ -549,7 +553,7 @@ class RuleRatelimitAdmin(RuleSubMixin, admin.ModelAdmin):
         "is_active",
         "is_managed",
     )
-    ordering = ("rule", "group")
+    ordering = ("rule__name", "group")
     list_filter = (*RuleSubMixin.list_filter, "action")
     list_editable = (
         "group",
@@ -565,15 +569,21 @@ class RuleRatelimitAdmin(RuleSubMixin, admin.ModelAdmin):
 
 @admin.register(RuleRatelimitGroup)
 class RuleRatelimitGroupAdmin(RuleSubMixin, admin.ModelAdmin):
-    list_display = ("rule", "name", "is_active", "is_managed")
-    ordering = ("rule", "name")
+    list_display = ("rule_display", "rule_id", "name", "is_active", "is_managed")
+    ordering = ("rule__name", "name")
     list_editable = ("name", "is_active")
     search_fields = ("name", "rule__name")
 
 
 @admin.register(RuleSource)
 class RuleSourceAdmin(RuleSubMixin, admin.ModelAdmin):
-    list_display = ("rule", "generator_fn", "interval", "is_active", "is_managed")
-    ordering = ("rule", "generator_fn")
+    list_display = (
+        "rule_display",
+        "generator_fn",
+        "interval",
+        "is_active",
+        "is_managed",
+    )
+    ordering = ("rule__name", "generator_fn")
     list_editable = ("generator_fn", "interval", "is_active")
     search_fields = ("generator_fn", "rule__name")
