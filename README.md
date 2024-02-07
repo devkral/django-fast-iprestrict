@@ -57,7 +57,6 @@ the lowest position to the highest position. State disabled rules are skipped
 
 Note: ipv4 and ipv6 rules are not interoperable. If the network does not match they are skipped like if they are in state "disabled".
 
-
 #### ratelimits
 
 ratelimits can be specified or a rule can be made to a ratelimit matcher (called programmatically via django-fast-ratelimit)
@@ -161,7 +160,8 @@ urlpatterns = [
 #### really lowlevel (without ratelimit)
 
 There are currently 3 matching methods of interest
-````python
+
+```python
 from django_fast_iprestrict.models import Rule, RulePath
 
 
@@ -169,13 +169,12 @@ Rule.objects.match_ip(ip="someip")
 Rule.objects.match_all_ip(ip="someip")
 RulePath.objects.match_ip_and_path(ip="someip", path="/foo")
 
-````
+```
 
 Note: the matching methods have much more arguments. See in source for details
 
 You might want to ignore the generic argument of match_ip and match_all_ip, it is dangerous as it ignores disabled rules
 and can easily lead to lock outs
-
 
 #### thirdparty integration (really deep lowlevel)
 
@@ -184,6 +183,8 @@ This cannot be overwritten by GUI. It is for the integration in thirdparty softw
 
 Note: you should either call clean or ensure that all list entries are field names
 
+Note: when using one of "ratelimits", "ratelimit_groups", "networks", "pathes", "sources" (fields to attached inline models)
+only the creation and deletion is blocked. To lock the inline models further down, add fields to managed_fields
 
 ### Sources (GEOIP)
 
@@ -196,7 +197,6 @@ Restriction: "\_" prefixed functions are not allowed
 They are referenced in admin with their path, e.g.:
 
 `tests.test_basic.test_iprestrict_gen` (=also working example in dev environment with test_settings)
-
 
 ### Ratelimits
 
@@ -257,6 +257,7 @@ poetry run ./manage.py createsuperuser
 poetry run ./manage.py runserver
 
 ```
+
 # changes
 
 -   0.13: add RuleRatelimitGroup for explicitly use Rules with ratelimit. No longer just match the rule name

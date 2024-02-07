@@ -131,18 +131,6 @@ class SubRuleInlineMixin(ManageableMixin):
         parent_field = opts.get_field("rule")
         return parent_field.remote_field.name not in obj.managed_fields
 
-    def has_change_permission(self, request, obj=None):
-        if not super().has_change_permission(request, obj):
-            return False
-        if not obj:
-            return True
-        if isinstance(obj, self.model):
-            return True
-        # check parent model
-        opts = self.opts
-        parent_field = opts.get_field("rule")
-        return parent_field.remote_field.name not in obj.managed_fields
-
 
 class RulePathInlineAdmin(SubRuleInlineMixin, admin.StackedInline):
     model = RulePath
