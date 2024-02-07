@@ -33,32 +33,28 @@ except ImportError:
     ratelimit = None
 
 
-class IsRatelimitMatcherFilter(admin.EmptyFieldListFilter):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.title = "is ratelimit matcher"
+class IsRatelimitMatcherFilter(admin.SimpleListFilter):
+    title = "is ratelimit matcher"
+    parameter_name = "is_ratelimit_matcher"
 
-    def choices(self, changelist):
-        # shows wrong amount, so disable
-        add_facets = False
-        # changelist.add_facets
-        facet_counts = self.get_facet_queryset(changelist) if add_facets else None
-        for lookup, title, count_field in (
-            (None, "All", None),
-            ("1", "Normal", "empty__c"),
-            ("0", "Ratelimit matching active", "not_empty__c"),
-        ):
-            if add_facets:
-                if count_field is not None:
-                    count = facet_counts[count_field]
-                    title = f"{title} ({count})"
-            yield {
-                "selected": self.lookup_val == lookup,
-                "query_string": changelist.get_query_string(
-                    {self.lookup_kwarg: lookup}
-                ),
-                "display": title,
-            }
+    def lookups(self, request, model_admin):
+        return [("0", "Normal mode"), ("1", "Ratelimit matcher mode")]
+
+    def queryset(self, request, queryset):
+        value = self.value()
+        if value == "0":
+            return queryset.filter(
+                ~models.Exists(
+                    RuleRatelimitGroup.objects.filter(rule_id=models.OuterRef("id"))
+                )
+            )
+        elif value == "1":
+            return queryset.filter(
+                models.Exists(
+                    RuleRatelimitGroup.objects.filter(rule_id=models.OuterRef("id"))
+                )
+            )
+        return queryset
 
 
 class IsManagedFilter(admin.SimpleListFilter):
@@ -269,7 +265,7 @@ class RuleAdmin(TestRulesMixin, ManageableMixin, admin.ModelAdmin):
     list_filter = (
         "action",
         IsManagedFilter,
-        ("ratelimit_groups", IsRatelimitMatcherFilter),
+        IsRatelimitMatcherFilter,
     )
     search_fields = ("name",)
     inlines = [
