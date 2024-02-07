@@ -569,7 +569,7 @@ class RuleRatelimitAdmin(RuleSubMixin, admin.ModelAdmin):
 
 @admin.register(RuleRatelimitGroup)
 class RuleRatelimitGroupAdmin(RuleSubMixin, admin.ModelAdmin):
-    list_display = ("rule_display", "rule_id", "name", "is_active", "is_managed")
+    list_display = ("rule_display", "name", "is_active", "is_managed")
     ordering = ("rule__name", "name")
     list_editable = ("name", "is_active")
     search_fields = ("name", "rule__name")
