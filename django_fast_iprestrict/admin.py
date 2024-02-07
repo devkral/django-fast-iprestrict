@@ -150,8 +150,8 @@ class RuleSubMixin(TestRulesMixin, ManageableMixin):
         ]
 
     def redirect_change(self, request, object_id):
-        rulep = RulePath.objects.get(id=object_id)
-        return HttpResponseRedirect(f"../../../rule/{rulep.rule_id}/change/")
+        subruleobj = self.model.objects.get(id=object_id)
+        return HttpResponseRedirect(f"../../../rule/{subruleobj.rule_id}/change/")
 
     def has_add_permission(self, request):
         return False
