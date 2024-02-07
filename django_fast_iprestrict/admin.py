@@ -136,7 +136,6 @@ class TestRulesMixin:
 class RuleSubMixin(TestRulesMixin, ManageableMixin):
     if hasattr(admin, "ShowFacets"):
         show_facets = admin.ShowFacets.ALWAYS
-    search_fields = ("rule__name",)
     list_filter = (
         "is_active",
         IsManagedFilter,
@@ -268,7 +267,7 @@ class RuleAdmin(TestRulesMixin, ManageableMixin, admin.ModelAdmin):
         IsManagedFilter,
         ("ratelimit_groups", IsRatelimitMatcherFilter),
     )
-    search_fields = ("name", "ratelimit_groups__name")
+    search_fields = ("name",)
     inlines = [
         RuleNetworkInlineAdmin,
         RuleSourceInlineAdmin,
