@@ -75,26 +75,29 @@ Note: deactivated RuleRatelimitGroups still prevent the normal mode, the RuleRat
 
 import django_fast_ratelimit as ratelimit
 
-r = ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict", groups="groupname")
+r = ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict", group="groupname")
 
 # since django-fast-ratelimit 7.3, rate is not required anymore for older versions add stub rate
 # Note: stub rates like 0/s will still raise Disabled
 # Note: 1/s is used as the default rate for django-fast-ratelimit 8.0.0. This way rates can be passed to iprestrict
-r = ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict", groups="groupname", rate="1/s")
+r = ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict", group="groupname", rate="1/s")
 
 # or when only checking ips and not pathes (when pathes are available)
 
-r = ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict:ignore_pathes", groups="groupname")
+r = ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict:ignore_pathes", group="groupname")
 
 # or when only checking ips and not pathes (when pathes are available) and requiring rule
-r = ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict:ignore_pathes,require_rule", groups="groupname")
+r = ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict:ignore_pathes,require_rule", group="groupname")
 
 # tuple/array syntax
-r = ratelimit.get_ratelimit(key=["django_fast_iprestrict.apply_iprestrict", "ignore_pathes", "require_rule"], groups="groupname")
+r = ratelimit.get_ratelimit(key=["django_fast_iprestrict.apply_iprestrict", "ignore_pathes", "require_rule"], group="groupname")
+
+# and now reset, regardless of the action in RatelimitAction, limitation: RESET_EPOCH only works when epoch is request
+ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict", group="groupname", rate="1/s", action=ratelimit.Action.RESET)
 
 
 # or as decorator with rule requirement
-@ratelimit.decorate(key="django_fast_iprestrict.apply_iprestrict:require_rule", groups="groupname")
+@ratelimit.decorate(key="django_fast_iprestrict.apply_iprestrict:require_rule", group="groupname")
 def foo(request):
     return ""
 
@@ -105,22 +108,24 @@ The following arguments are valid:
 
 -   `ignore_pathes`: match only via ip
 -   `require_rule`: raise Disabled if rule with rulename not exist
--   `execute_only`: only decorate request, evaluate matching iprestrict rule action, wait and block, don't modify the ratelimit counter, for two-phased execution models
--   `count_only`: don't apply wait and block, when rule exists return only 0 (allowed), update the counter only and decorate request, for two-phased execution models
+-   `no_count` former `execute_only`: only decorate request, evaluate matching iprestrict rule action, wait and block, don't modify the ratelimit counter, for two-phased execution models
+-   `no_execute` former `count_only`: don't apply wait and block, when rule exists return only 0 (allowed), update the counter only and decorate request, for two-phased execution models
 
 Note: when the request is already annotated with a ratelimit with the same decorate_name both instances are merged
 
 Note: you can provide a rate and set the field rate in iprestrict ratelimit to "inherit" for using the provided rate, this works only when a rate is specified
+
+Note: when using with reset, both options are automatically set. Limitation: RESET_EPOCH only works when epoch is the request
 
 #### two phased execution model
 
 Especially with async code it can be handy to have two phases:
 
 an execution phase in which only wait/block is executed and the counter not modified. Its place is before an expensive function.
-The most common place is a decorator in urls. `execute_only` argument
+The most common place is a decorator in urls. `no_count` argument
 
 a count phase in which the ratelimit counter in cache is modified. Its place is after/in an expensive function.
-In case of invariants or if the calculated result should not be wasted, no actions are executed. `count_only` argument
+In case of invariants or if the calculated result should not be wasted, no actions are executed. `no_execute` argument
 
 views.py:
 
@@ -260,8 +265,10 @@ poetry run ./manage.py runserver
 
 ```
 
-# changes
+# notable changes
 
+-   0.18: rename execute_only to no_count and count_only to no_execute. The former names are still valid but deprecated
+    the ratelimit reset action causes both options to be set and resets keys regardless of the action specified in RuleRatelimit
 -   0.13: add RuleRatelimitGroup for explicitly use Rules with ratelimit. No longer just match the rule name
 
 # TODO

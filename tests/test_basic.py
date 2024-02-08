@@ -146,7 +146,7 @@ class SyncTests(TestCase):
 
     def test_as_ratelimit_fn_two_phased(self):
         @ratelimit.decorate(
-            key="django_fast_iprestrict.apply_iprestrict:execute_only",
+            key="django_fast_iprestrict.apply_iprestrict:no_count",
             group="test",
         )
         def fn(request):
@@ -172,7 +172,7 @@ class SyncTests(TestCase):
             request = factory.get("/foobar/")
             ratelimit.get_ratelimit(
                 request=request,
-                key="django_fast_iprestrict.apply_iprestrict:count_only",
+                key="django_fast_iprestrict.apply_iprestrict:no_execute",
                 group="test",
             )
         with self.assertRaises(ratelimit.RatelimitExceeded):
@@ -311,7 +311,7 @@ class AsyncTests(TestCase):
             request = factory.get("/foobar/")
             await ratelimit.aget_ratelimit(
                 request=request,
-                key="django_fast_iprestrict.apply_iprestrict:count_only",
+                key="django_fast_iprestrict.apply_iprestrict:no_execute",
                 group="test",
             )
         with self.assertRaises(ratelimit.RatelimitExceeded):
