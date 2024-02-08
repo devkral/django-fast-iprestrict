@@ -115,7 +115,7 @@ Note: when the request is already annotated with a ratelimit with the same decor
 
 Note: you can provide a rate and set the field rate in iprestrict ratelimit to "inherit" for using the provided rate, this works only when a rate is specified
 
-Note: when using with reset, both options are automatically set. Limitation: RESET_EPOCH only works when epoch is the request
+Note: when using with reset, both options are automatically set. Limitation: RESET_EPOCH only works when epoch is the request (default)
 
 #### two phased execution model
 

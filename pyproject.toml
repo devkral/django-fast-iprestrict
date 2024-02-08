@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "django-fast-iprestrict"
-version = "0.17.4"
-description = ""
+version = "0.18.0"
+description = "Restrict access to django project to trusted ips and optionally apply ratelimits. Like WAF in django."
 authors = ["alex <devkral@web.de>"]
 license = "MIT"
 readme = "README.md"
