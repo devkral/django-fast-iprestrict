@@ -175,20 +175,22 @@ class RuleManager(models.Manager):
         rule_id: Optional[int] = None,
         generic=False,
         remote=True,
+        # overwrite default action
+        default_action=None,
     ):
         ip_address_user = parse_ipaddress(ip)
         if rule_id:
             item = self.ip_matchers_local(generic=generic).get(rule_id, None)
             if not item:
-                return None, get_default_action(), False, _empty
+                return None, get_default_action(default_action), False, _empty
             if method and method not in item[1]:
-                return None, get_default_action(), False, _empty
+                return None, get_default_action(default_action), False, _empty
 
             if ratelimit_group:
                 if ratelimit_group not in item[2]:
-                    return None, get_default_action(), False, _empty
+                    return None, get_default_action(default_action), False, _empty
             elif item[2] is not _empty:
-                return None, get_default_action(), False, _empty
+                return None, get_default_action(default_action), False, _empty
 
             for network in item[0]:
                 try:
@@ -237,7 +239,7 @@ class RuleManager(models.Manager):
                             return rule_id, *item[3:]
                     except TypeError:
                         pass
-        return None, get_default_action(), False, _empty
+        return None, get_default_action(default_action), False, _empty
 
     amatch_ip = sync_to_async(match_ip)
 
@@ -694,6 +696,8 @@ class RulePathManager(models.Manager):
         ratelimit_group: Optional[str] = None,
         rule_id=None,
         remote=True,
+        # overwrite default action
+        default_action=None,
     ):
         # ordered
         # with generic = pathless, non-catchall and disabled candidates are included
@@ -728,7 +732,7 @@ class RulePathManager(models.Manager):
                 if action == RULE_ACTION.only_ratelimit:
                     continue
                 return _rule_id, action, is_catch_all, ratelimits
-        return None, get_default_action(), False, ratelimits
+        return None, get_default_action(default_action), False, ratelimits
 
     amatch_ip_and_path = sync_to_async(match_ip_and_path)
 

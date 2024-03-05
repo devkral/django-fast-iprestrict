@@ -2,6 +2,7 @@ __all__ = ["apply_iprestrict"]
 
 import asyncio
 from functools import partial, singledispatch
+from typing import Optional, Union
 
 from django.http import HttpRequest
 
@@ -23,6 +24,7 @@ if ratelimit:
         require_rule=False,
         no_count=False,
         no_execute=False,
+        default_action: Optional[Union[str, RULE_ACTION]] = None,
     ):
         # don't check methods here as the check is done in ratelimit
         from .models import Rule, RulePath, RuleRatelimitGroup
@@ -37,12 +39,19 @@ if ratelimit:
             name_has_pathes = RuleRatelimitGroup.objects.name_matchers()[1]
             with_path = group in name_has_pathes
         if with_path:
-            rule_id, action, _, ratelimits = RulePath.objects.match_ip_and_path(
-                ip=ip, path=request.path, ratelimit_group=group
+            rule_id, iprestrict_action, _, ratelimits = (
+                RulePath.objects.match_ip_and_path(
+                    ip=ip,
+                    path=request.path,
+                    ratelimit_group=group,
+                    default_action=default_action,
+                )
             )
         else:
-            rule_id, action, _, ratelimits = Rule.objects.match_ip(
-                ip=ip, ratelimit_group=group
+            rule_id, iprestrict_action, _, ratelimits = Rule.objects.match_ip(
+                ip=ip,
+                ratelimit_group=group,
+                default_action=default_action,
             )
         if rule_id is None and require_rule:
             raise ratelimit.Disabled(
@@ -73,7 +82,7 @@ if ratelimit:
                 r.reset()
             elif action == RATELIMIT_ACTION.RESET_EPOCH:
                 r.reset(request)
-        if action == RULE_ACTION.deny and not no_execute:
+        if iprestrict_action == RULE_ACTION.deny and not no_execute:
             return 1
         return 0
 
@@ -86,6 +95,7 @@ if ratelimit:
         require_rule=False,
         no_count=False,
         no_execute=False,
+        default_action: Optional[Union[str, RULE_ACTION]] = None,
     ):
         # don't check methods here as the check is done in ratelimit
         from .models import Rule, RulePath, RuleRatelimitGroup
@@ -101,12 +111,22 @@ if ratelimit:
             name_has_pathes = (await RuleRatelimitGroup.objects.aname_matchers())[1]
             with_path = group in name_has_pathes
         if with_path:
-            rule_id, action, _, ratelimits = await RulePath.objects.amatch_ip_and_path(
-                ip=ip, path=request.path, ratelimit_group=group
+            (
+                rule_id,
+                iprestrict_action,
+                _,
+                ratelimits,
+            ) = await RulePath.objects.amatch_ip_and_path(
+                ip=ip,
+                path=request.path,
+                ratelimit_group=group,
+                default_action=default_action,
             )
         else:
-            rule_id, action, _, ratelimits = await Rule.objects.amatch_ip(
-                ip=ip, ratelimit_group=group
+            rule_id, iprestrict_action, _, ratelimits = await Rule.objects.amatch_ip(
+                ip=ip,
+                ratelimit_group=group,
+                default_action=default_action,
             )
         if rule_id is None and require_rule:
             raise ratelimit.Disabled(
@@ -137,7 +157,7 @@ if ratelimit:
                 await r.areset()
             elif action == RATELIMIT_ACTION.RESET_EPOCH:
                 await r.areset(request)
-        if action == RULE_ACTION.deny and not no_execute:
+        if iprestrict_action == RULE_ACTION.deny and not no_execute:
             return 1
         return 0
 
@@ -156,12 +176,22 @@ if ratelimit:
     def _(arg: str = "", *args):
         args = list(args)
         args.extend(arg.split(","))
+        default_action = None
+        for arg in args:
+            if isinstance(arg, str):
+                if arg.startswith("default_action:"):
+                    default_action = arg.split(":", 1)[-1]
+            elif isinstance(arg, (tuple, list)) and len(arg) >= 2:
+                if arg[0] == "default_action":
+                    # call to verify if already the right value/format
+                    default_action = arg[1]
         return partial(
             apply_iprestrict.dispatch(HttpRequest),
             ignore_pathes="ignore_pathes" in args,
             require_rule="require_rule" in args,
             no_count="no_count" in args or "execute_only" in args,
             no_execute="no_execute" in args or "count_only" in args,
+            default_action=default_action,
         )
 
 else:

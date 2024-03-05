@@ -95,10 +95,12 @@ def get_ip(request: HttpRequest):
 
 
 def get_default_action(action=None):
-    if action:
-        return action
-    action = RULE_ACTION[getattr(settings, "IPRESTRICT_DEFAULT_ACTION", "allow")]
-    assert action != RULE_ACTION.disabled, "disabled is not a valid default action"
+    if not action:
+        action = getattr(settings, "IPRESTRICT_DEFAULT_ACTION", "allow")
+    if not isinstance(action, RULE_ACTION):
+        action = RULE_ACTION[action]
+    if action == RULE_ACTION.disabled or action == RULE_ACTION.only_ratelimit:
+        raise ValueError("disabled or only_ratelimit are not valid default actions")
     return action.value
 
 

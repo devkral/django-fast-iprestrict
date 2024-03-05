@@ -106,6 +106,7 @@ def foo(request):
 
 The following arguments are valid:
 
+-   `default_action:allow/deny`: overwrite global default action when no rule was found
 -   `ignore_pathes`: match only via ip
 -   `require_rule`: raise Disabled if rule with rulename not exist
 -   `no_count` former `execute_only`: only decorate request, evaluate matching iprestrict rule action, wait and block, don't modify the ratelimit counter, for two-phased execution models
