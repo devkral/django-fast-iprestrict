@@ -106,11 +106,11 @@ def foo(request):
 
 The following arguments are valid:
 
--   `default_action:allow/deny`: overwrite global default action when no rule was found
+-   `default_action:allow/deny`: overwrite global default action when no rule was found, overwrites `no_execute` default behaviour
 -   `ignore_pathes`: match only via ip
 -   `require_rule`: raise Disabled if rule with rulename not exist
 -   `no_count` former `execute_only`: only decorate request, evaluate matching iprestrict rule action, wait and block, don't modify the ratelimit counter, for two-phased execution models
--   `no_execute` former `count_only`: don't apply wait and block, when rule exists return only 0 (allowed), update the counter only and decorate request, for two-phased execution models
+-   `no_execute` former `count_only`: don't apply wait and block, update the counter only when rule exists. If no `default_action` argument was specified return only 0 (allowed) and decorate request, for two-phased execution models
 
 Note: when the request is already annotated with a ratelimit with the same decorate_name both instances are merged
 
@@ -142,7 +142,7 @@ class MyView(View):
         return HttpResponse(b"foo", status=200)
     def post(self, request):
         # expensive function
-        ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict:count_only", groups="rulename", request=request)
+        ratelimit.get_ratelimit(key="django_fast_iprestrict.apply_iprestrict:no_execute", groups="rulename", request=request)
         return HttpResponse(b"foo", status=200)
 
 
@@ -157,7 +157,7 @@ from .views import MyView
 urlpatterns = [
     path(
         "foo/",
-        ratelimit.decorate(key="django_fast_iprestrict.apply_iprestrict:execute_only", groups="rulename")(MyView.as_view()),
+        ratelimit.decorate(key="django_fast_iprestrict.apply_iprestrict:no_count", groups="rulename")(MyView.as_view()),
     ),
 ]
 
@@ -268,7 +268,7 @@ poetry run ./manage.py runserver
 
 # notable changes
 
--   0.18: rename execute_only to no_count and count_only to no_execute. The former names are still valid but deprecated
+-   0.18: rename execute_only to no_count and count_only to no_execute. The former names are still valid for the string array/string based call but deprecated
     the ratelimit reset action causes both options to be set and resets keys regardless of the action specified in RuleRatelimit
 -   0.13: add RuleRatelimitGroup for explicitly use Rules with ratelimit. No longer just match the rule name
 

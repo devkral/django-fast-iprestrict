@@ -82,7 +82,9 @@ if ratelimit:
                 r.reset()
             elif action == RATELIMIT_ACTION.RESET_EPOCH:
                 r.reset(request)
-        if iprestrict_action == RULE_ACTION.deny and not no_execute:
+        if no_execute and not default_action:
+            return 0
+        if iprestrict_action == RULE_ACTION.deny:
             return 1
         return 0
 
@@ -157,7 +159,9 @@ if ratelimit:
                 await r.areset()
             elif action == RATELIMIT_ACTION.RESET_EPOCH:
                 await r.areset(request)
-        if iprestrict_action == RULE_ACTION.deny and not no_execute:
+        if no_execute and not default_action:
+            return 0
+        if iprestrict_action == RULE_ACTION.deny:
             return 1
         return 0
 
@@ -173,9 +177,12 @@ if ratelimit:
             return _apply_iprestrict(request, group, action, rate, **kwargs)
 
     @apply_iprestrict.register(str)
-    def _(arg: str = "", *args):
+    @apply_iprestrict.register(list)
+    @apply_iprestrict.register(tuple)
+    def _(arg="", *args):
         args = list(args)
-        args.extend(arg.split(","))
+        if isinstance(arg, str):
+            args.extend(arg.split(","))
         default_action = None
         for arg in args:
             if isinstance(arg, str):
