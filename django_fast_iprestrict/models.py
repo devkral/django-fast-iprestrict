@@ -337,6 +337,9 @@ class RuleManager(models.Manager):
                 ),
             ).update(position=models.F("position") + models.F("position_mod"))
 
+    def get_by_natural_key(self, name):
+        return self.get(name=name)
+
 
 class Rule(Manageable):
     _trigger_cleanup = True
@@ -413,6 +416,9 @@ class Rule(Manageable):
         self.methods = ",".join(
             sorted(map(lambda x: x.upper().strip(), self.methods.split(",")))
         )
+
+    def natural_key(self):
+        return (self.name,)
 
 
 class RuleRatelimitManager(models.Manager):
