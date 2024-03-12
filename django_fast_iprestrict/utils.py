@@ -4,6 +4,7 @@ import re
 
 from django.conf import settings
 from django.db import models
+from django.db.utils import DEFAULT_DB_ALIAS
 from django.http import HttpRequest
 
 
@@ -106,3 +107,15 @@ def get_default_action(action=None):
 
 class LockoutException(Exception):
     pass
+
+
+def check_is_iprestrict_ready():
+    from django.db import connections
+
+    from .models import Rule
+
+    connection = connections[DEFAULT_DB_ALIAS]
+    existing_tables = connection.introspection.django_table_names(
+        only_existing=True, include_views=False
+    )
+    return Rule._meta.db_table in existing_tables

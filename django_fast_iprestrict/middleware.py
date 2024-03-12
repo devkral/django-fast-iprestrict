@@ -3,7 +3,7 @@ from django.core.exceptions import PermissionDenied
 from django.db.utils import OperationalError
 from django.utils.decorators import sync_and_async_middleware
 
-from .utils import RULE_ACTION, get_ip
+from .utils import RULE_ACTION, check_is_iprestrict_ready, get_default_action, get_ip
 
 try:
     import django_fast_ratelimit as ratelimit
@@ -45,7 +45,11 @@ def fast_iprestrict(get_response):
                 if action == RULE_ACTION.deny.value:
                     raise PermissionDenied()
             except OperationalError as exc:
-                assert exc.args[0].startswith("no such table:")
+                # tables are not initialized yet and e.g. via asgi it is tried to retrieve a schema
+                if check_is_iprestrict_ready():
+                    raise exc
+                if get_default_action() == RULE_ACTION.deny.value:
+                    raise PermissionDenied()
             return await get_response(request)
 
     else:
@@ -73,7 +77,11 @@ def fast_iprestrict(get_response):
                 if action == RULE_ACTION.deny.value:
                     raise PermissionDenied()
             except OperationalError as exc:
-                assert exc.args[0].startswith("no such table:")
+                # tables are not initialized yet and e.g. via asgi it is tried to retrieve a schema
+                if check_is_iprestrict_ready():
+                    raise exc
+                if get_default_action() == RULE_ACTION.deny.value:
+                    raise PermissionDenied()
             return get_response(request)
 
     return middleware

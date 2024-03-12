@@ -3,10 +3,15 @@ from unittest.mock import patch
 
 import django_fast_ratelimit as ratelimit
 from django.contrib.auth.models import User
-from django.test import RequestFactory, TestCase, override_settings
+from django.core.management import call_command
+from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 
 from django_fast_iprestrict.models import RATELIMIT_ACTION, Rule, RuleSource
-from django_fast_iprestrict.utils import RULE_ACTION, LockoutException
+from django_fast_iprestrict.utils import (
+    RULE_ACTION,
+    LockoutException,
+    check_is_iprestrict_ready,
+)
 
 admin_index_pages = [
     "/admin/django_fast_iprestrict/",
@@ -29,9 +34,26 @@ def test_notallowed_iprestrict_gen():
     return ["::2", "127.0.0.2"]
 
 
+class NoDbTest(SimpleTestCase):
+    databases = ["default"]
+
+    def test_is_not_ready(self):
+        call_command(
+            "migrate",
+            "django_fast_iprestrict",
+            "zero",
+            no_input=True,
+            interactive=False,
+        )
+        self.assertFalse(check_is_iprestrict_ready())
+
+
 class SyncTests(TestCase):
     def setUp(self):
         self.admin_user = User.objects.create_superuser(username="admin")
+
+    def test_is_ready(self):
+        self.assertTrue(check_is_iprestrict_ready())
 
     def test_admin_default(self):
         self.client.force_login(self.admin_user)
