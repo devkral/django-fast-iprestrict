@@ -10,6 +10,7 @@ from django_fast_iprestrict.models import RATELIMIT_ACTION, Rule, RuleSource
 from django_fast_iprestrict.utils import (
     RULE_ACTION,
     LockoutException,
+    acheck_is_iprestrict_ready,
     check_is_iprestrict_ready,
 )
 
@@ -34,18 +35,26 @@ def test_notallowed_iprestrict_gen():
     return ["::2", "127.0.0.2"]
 
 
-class NoDbTest(SimpleTestCase):
+class NoTablesTest(SimpleTestCase):
     databases = ["default"]
 
-    def test_is_not_ready(self):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
         call_command(
             "migrate",
             "django_fast_iprestrict",
             "zero",
             no_input=True,
             interactive=False,
+            verbosity=0,
         )
+
+    def test_is_not_ready(self):
         self.assertFalse(check_is_iprestrict_ready())
+
+    async def test_is_not_ready_async(self):
+        self.assertFalse(await acheck_is_iprestrict_ready())
 
 
 class SyncTests(TestCase):
@@ -305,6 +314,9 @@ class SyncTests(TestCase):
 
 
 class AsyncTests(TestCase):
+    async def test_is_ready(self):
+        self.assertTrue(await acheck_is_iprestrict_ready())
+
     async def test_as_ratelimit_fn_two_phased(self):
         @ratelimit.decorate(
             key="django_fast_iprestrict.apply_iprestrict:execute_only",

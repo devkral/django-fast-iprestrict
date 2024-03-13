@@ -2,6 +2,7 @@ import functools
 import ipaddress
 import re
 
+from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.db import models
 from django.db.utils import DEFAULT_DB_ALIAS
@@ -119,3 +120,6 @@ def check_is_iprestrict_ready():
         only_existing=True, include_views=False
     )
     return Rule._meta.db_table in existing_tables
+
+
+acheck_is_iprestrict_ready = sync_to_async(check_is_iprestrict_ready)
