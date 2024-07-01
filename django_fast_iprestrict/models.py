@@ -389,11 +389,12 @@ class Rule(Manageable):
         ]
 
     def get_ratelimit_dicts(self):
-        return list(
+        return list(map(
+            lambda x: {**x, "rate": x["rate"] or None},
             self.ratelimits.filter(is_active=True).values(
                 "key", "group", "rate", "decorate_name", "block", "wait", "action"
             )
-        )
+        ))
 
     def get_methods(self):
         if self.invert_methods:

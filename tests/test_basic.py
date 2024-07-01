@@ -22,7 +22,6 @@ admin_index_pages = [
     "/admin/django_fast_iprestrict/rule/",
 ]
 
-
 def test_iprestrict_gen():
     return ["::2", "127.0.0.2"]
 
@@ -55,6 +54,24 @@ class NoTablesTest(SimpleTestCase):
 
     async def test_is_not_ready_async(self):
         self.assertFalse(await acheck_is_iprestrict_ready())
+
+
+class StructureTests(TestCase):
+    def test_ratelimits_empty_is_None(self):
+        rule = Rule.objects.create(name="test", action=RULE_ACTION.allow)
+        rule.ratelimits.create(key="static", group="foo")
+        rule.ratelimits.create(key="static", group="foo2")
+        rule.ratelimits.create(key="static", group="foo3")
+        for ratelimit_dict in rule.get_ratelimit_dicts():
+            self.assertIs(ratelimit_dict["rate"], None)
+
+    def test_ratelimits_inherit(self):
+        rule = Rule.objects.create(name="test", action=RULE_ACTION.allow)
+        rule.ratelimits.create(key="static", group="foo", rate="inherit")
+        rule.ratelimits.create(key="static", group="foo2", rate="inherit")
+        rule.ratelimits.create(key="static", group="foo3", rate="inherit")
+        for ratelimit_dict in rule.get_ratelimit_dicts():
+            self.assertEqual(ratelimit_dict["rate"], "inherit")
 
 
 class SyncTests(TestCase):
@@ -311,6 +328,53 @@ class SyncTests(TestCase):
         response = self.client.get(admin_index_pages[0])
         self.assertTrue(hasattr(response.wsgi_request, "ratelimit"))
         self.assertEqual(response.status_code, 403)
+
+
+    def test_ratelimit_middleware_deny(self):
+        self.client.force_login(self.admin_user)
+        rule = Rule.objects.create(
+            name="test",
+            action=RULE_ACTION.only_ratelimit,
+            invert_methods=True,
+            methods="",
+        )
+        rule.pathes.create(path=".*", is_regex=True)
+        rule.ratelimits.create(
+            key="tests.functions.deny",
+            group="test_ratelimit_middleware",
+            block=True,
+            is_active=True,
+        )
+        response = self.client.get(admin_index_pages[0])
+        self.assertEqual(response.status_code, 403)
+
+    def test_ratelimit_middleware_skip(self):
+        self.client.force_login(self.admin_user)
+        rule = Rule.objects.create(
+            name="test",
+            action=RULE_ACTION.only_ratelimit,
+            invert_methods=True,
+            methods="",
+        )
+        rule.pathes.create(path=".*", is_regex=True)
+        rule.ratelimits.create(
+            key="tests.functions.skip",
+            group="test_ratelimit_middleware",
+            block=True,
+            is_active=True,
+        )
+        # skip inherit
+        rule.ratelimits.create(
+            key="tests.functions.deny",
+            group="test_ratelimit_middleware",
+            block=True,
+            is_active=True,
+            rate="inherit"
+        )
+        response = self.client.get(admin_index_pages[0])
+        self.assertEqual(response.status_code, 200)
+        response = self.client.get(admin_index_pages[0])
+        self.assertEqual(response.status_code, 200)
 
 
 class AsyncTests(TestCase):
