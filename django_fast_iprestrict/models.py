@@ -388,9 +388,16 @@ class Rule(Manageable):
             )
         ]
 
+    @staticmethod
+    def _clean_rate(rate: Optional[str]) -> Optional[str]:
+        if rate == "none":
+            return None
+        return rate or None
+
+
     def get_ratelimit_dicts(self):
         return list(map(
-            lambda x: {**x, "rate": x["rate"] or None},
+            lambda x: {**x, "rate": self._clean_rate(x["rate"])},
             self.ratelimits.filter(is_active=True).values(
                 "key", "group", "rate", "decorate_name", "block", "wait", "action"
             )
@@ -445,7 +452,8 @@ class RuleRatelimit(ActivatableAndManageable):
         validators=[validate_rate],
         help_text=(
             'Set to "inherit" to use the provided rate (when set to "inherit" '
-            "ratelimit is ignored in middleware and without a provided rate)"
+            "ratelimit is ignored in middleware and without a provided rate)."
+            'Set to "none" to not provide a rate.'
         ),
     )
     block = models.BooleanField(blank=True, default=False)

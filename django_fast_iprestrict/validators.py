@@ -90,7 +90,7 @@ _rate = re.compile(r"(\d+)/(\d+)?([smhdw])?")
 
 
 def validate_rate(value):
-    if value == "inherit":
+    if value in {"inherit", "none"}:
         return
     matched = _rate.match(value)
     if not matched:

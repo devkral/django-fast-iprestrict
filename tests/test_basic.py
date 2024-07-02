@@ -57,11 +57,11 @@ class NoTablesTest(SimpleTestCase):
 
 
 class StructureTests(TestCase):
-    def test_ratelimits_empty_is_None(self):
+    def test_ratelimits_empty(self):
         rule = Rule.objects.create(name="test", action=RULE_ACTION.allow)
-        rule.ratelimits.create(key="static", group="foo")
-        rule.ratelimits.create(key="static", group="foo2")
-        rule.ratelimits.create(key="static", group="foo3")
+        rule.ratelimits.create(key="static", group="foo", rate="none")
+        rule.ratelimits.create(key="static", group="foo2", rate="none")
+        rule.ratelimits.create(key="static", group="foo3", rate="none")
         for ratelimit_dict in rule.get_ratelimit_dicts():
             self.assertIs(ratelimit_dict["rate"], None)
 
@@ -344,6 +344,7 @@ class SyncTests(TestCase):
             group="test_ratelimit_middleware",
             block=True,
             is_active=True,
+            rate="none"
         )
         response = self.client.get(admin_index_pages[0])
         self.assertEqual(response.status_code, 403)
@@ -362,6 +363,7 @@ class SyncTests(TestCase):
             group="test_ratelimit_middleware",
             block=True,
             is_active=True,
+            rate="none"
         )
         # skip inherit
         rule.ratelimits.create(
